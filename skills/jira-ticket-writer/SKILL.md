@@ -1,13 +1,14 @@
 ---
 name: jira-ticket-writer
 description: >
-  Writes Jira content from a rough user prompt: tickets (stories, bugs, chores),
-  new comments, and replies to existing comments. Use whenever the user asks to
-  create, write, or draft a Jira ticket, issue, story, bug report, task
-  description, comment, or reply — even if they just say "make a ticket for X",
-  "write up this bug", "post a comment on this ticket", or "reply to this
-  comment". Adapts the format to the content type. Asks clarifying questions
-  when critical information is missing.
+  Use when the user wants to write, draft, or create a Jira ticket or Jira
+  comment — bugs, stories, tasks, status updates, or replies. Activate on
+  action verbs like "make a ticket", "write up this bug", "post a comment",
+  "reply to that comment", even when "Jira" is never mentioned. The signal is
+  creation intent: the user has something to communicate and needs it turned
+  into a structured Jira artifact. Skip when the user wants to read, analyze,
+  summarize, or estimate an existing ticket, or when the output is a PR
+  description, email, or Slack message.
 ---
 
 # Jira Ticket & Comment Writer
