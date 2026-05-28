@@ -10,6 +10,8 @@ import sys
 import zipfile
 import xml.etree.ElementTree as ET
 import itertools
+import tempfile
+from contextlib import contextmanager
 from pathlib import Path
 
 NS = "http://www.vd.ch/fiscalite/vaudtax"
@@ -60,6 +62,26 @@ def extract_attachment(vaudtax_path, zip_key, output_path):
     with zipfile.ZipFile(vaudtax_path) as z:
         with z.open(zip_key) as src:
             Path(output_path).write_bytes(src.read())
+
+
+@contextmanager
+def open_attachment(vaudtax_path, zip_key, suffix=None):
+    """Extract an attachment to a temp file, yield its path, then delete it.
+
+    Usage:
+        with open_attachment("file.vaudtax", "doc17700000000000", suffix=".pdf") as path:
+            text = read_pdf(path)
+    """
+    if suffix is None:
+        suffix = Path(zip_key).suffix or ".tmp"
+    tmp = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
+    tmp_path = Path(tmp.name)
+    tmp.close()
+    try:
+        extract_attachment(vaudtax_path, zip_key, tmp_path)
+        yield str(tmp_path)
+    finally:
+        tmp_path.unlink(missing_ok=True)
 
 
 def summarize(root):

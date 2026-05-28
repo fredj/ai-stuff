@@ -303,13 +303,15 @@ Each `<documents>` element in the XML has:
 - `<label>` — human-readable description (e.g. "Activités salariées : Certificat de salaire")
 - `<fileSize>` — size in bytes
 
-To extract an attachment:
+Always use the `open_attachment()` context manager from `parse_vaudtax.py` — it extracts to a temp file and deletes it automatically on exit:
 
 ```python
-import zipfile
-with zipfile.ZipFile("file.vaudtax") as z:
-    with z.open("doc17700000000000") as src, open("salaire.pdf", "wb") as dst:
-        dst.write(src.read())
+from parse_vaudtax import open_attachment
+from pdf_utils import read_pdf
+
+with open_attachment("file.vaudtax", "doc17700000000000", suffix=".pdf") as path:
+    text = read_pdf(path)
+# temp file is deleted here
 ```
 
 Use the `<key>` value (not the `<reference>` UUID) to match XML metadata to ZIP entries. The `parse_vaudtax.py` script lists all attachments with their key, filename, MIME type, size, and label.
@@ -370,3 +372,15 @@ for el in root.findall(f"{{{NS}}}immeubles"):  # change section name as needed
 | Communal coefficients | [Arrêtés d'imposition](https://www.vd.ch/etat-droit-finances/communes/finances-communales/arretes-dimposition-et-tableaux-des-impots-communaux) | Current year XLS for all communes |
 
 Limits and barème tables are indexed annually — verify the year matches the declaration's `fiscalPeriod`. Update PDF URLs by replacing the year suffix (e.g. `21001_2024.pdf` for fiscal year 2024).
+
+## Guardrails
+
+- **Estimates vs official figures.** `compute_code800.py` output is an estimate. When a `lastGesdemReference` or an official bordereau is available, those figures take precedence. Never present script output as the authoritative tax due.
+
+- **Barème limits are year-specific — always use `fiscalPeriod`.** The limits in DEDUCTIONS.md (pilier 3a CHF 7'258, assurances CHF 9'900, etc.) are 2025 values. For declarations with a different `fiscalPeriod`, the applicable limits differ. Don't apply current-year limits to another fiscal year without flagging the assumption.
+
+- **Don't cross-apply commune rates.** Tax coefficients are commune-specific. If the commune in `identification` differs from the one passed to `calculate_taxes.py`, flag the mismatch. Yvonand ≠ Yverdon ≠ Lausanne.
+
+- **Réforme valeur locative applies from 2029.** For any analysis projecting future tax liability (2029+): valeur locative is suppressed, mortgage interest becomes non-deductible (except primo-acquéreurs Art. 33a LIFD), and code 660 (logement) disappears for IFD. Don't apply pre-2029 deduction rules to post-2028 projections.
+
+- **Network exposure is limited to aggregate figures only.** The only network call in the entire skill is `calculate_taxes.py` → `https://www.vd.ch/...`. It sends three integers (`revenu_icc`, `fortune_icc`, `revenu_ifd`), the normalized commune name, and marital status — no NAVS13, IBAN, name, address, employer name, or salary breakdown. All other scripts are fully local and make no network calls.
