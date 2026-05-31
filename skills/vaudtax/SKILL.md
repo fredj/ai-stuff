@@ -111,6 +111,22 @@ Amounts are in CHF unless a different `devise` is specified.
 
 **A summary is just a summary.** Do not run `compute_code800.py` or `calculate_taxes.py` unless the user explicitly asks for a tax estimate. Running the tax scripts uninvited adds latency and produces figures the user didn't ask for.
 
+### Proactive cross-checks during a summary
+
+Even for a basic summary, always cross-check attached documents against their corresponding XML values — discrepancies are high-value findings the user needs before filing.
+
+**Pillar 3a attestations** — whenever `piecesJustificativesFacultatives` or `piecesJustificativesObligatoires` lists one or more attachments whose label contains "21 EDP" or "cotisations" or "pilier 3a":
+1. Read each attestation PDF with `read_pdf()` and extract the total using `extract_form21_totals()` (or `extract_postfinance_3a()` for PostFinance format)
+2. Sum the amounts per taxpayer and compare against `formesReconnuesPrevoyanceIndividuelleContribuable1` / `...Contribuable2` in `primesEtCotisationsAssurance`
+3. If the sums differ, flag it prominently: **"⚠ Écart pilier 3a : attestations CHF X, déclaration CHF Y — vérifier avant envoi"**
+
+**Salary certificates** — whenever a label contains "Certificat de salaire" and the taxpayer has one `activiteSalarieeRevenus` entry:
+1. Read the PDF and extract line 11 (salaire net) and line 10.1 (cotisation LPP)
+2. Compare against `salaireNet` and `cotisationOrdinaire` in the corresponding XML entry
+3. Flag any mismatch — small rounding differences (±1 CHF) are normal; larger gaps are not
+
+These checks take a few extra seconds but can catch real errors. Run them as part of every summary unless the user explicitly says they only want a quick overview.
+
 When verifying or cross-checking deductions, see [DEDUCTIONS.md](DEDUCTIONS.md) for official rules, caps (ICC and IFD), and the analysis checklist.
 
 To estimate taxes due from the declared figures, see [TAX_COMPUTATION.md](TAX_COMPUTATION.md) for the ICC and IFD formulas (any Vaud municipality).
