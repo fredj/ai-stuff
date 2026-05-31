@@ -109,6 +109,8 @@ When asked to summarize or read a `.vaudtax` file, run `parse_vaudtax.py` and pr
 
 Amounts are in CHF unless a different `devise` is specified.
 
+**A summary is just a summary.** Do not run `compute_code800.py` or `calculate_taxes.py` unless the user explicitly asks for a tax estimate. Running the tax scripts uninvited adds latency and produces figures the user didn't ask for.
+
 When verifying or cross-checking deductions, see [DEDUCTIONS.md](DEDUCTIONS.md) for official rules, caps (ICC and IFD), and the analysis checklist.
 
 To estimate taxes due from the declared figures, see [TAX_COMPUTATION.md](TAX_COMPUTATION.md) for the ICC and IFD formulas (any Vaud municipality).

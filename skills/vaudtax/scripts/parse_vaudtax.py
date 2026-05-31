@@ -38,7 +38,7 @@ KNOWN_SECTIONS = {
     "piecesJustificativesObligatoires", "piecesJustificativesFacultatives",
     "infosComplementairesIes", "prestationsEnCapital",
     # UI / navigation state (intentionally skipped)
-    "guidedNav", "userProfil",
+    "guidedNav", "userProfil", "piecesJustificativesSubFormInitialized",
 }
 
 
@@ -456,9 +456,20 @@ def summarize(root):
 
     out["assets"] = assets
 
-    # Unknown sections — any top-level element not in KNOWN_SECTIONS
+    # Unknown sections — any top-level element not in KNOWN_SECTIONS that has actual data.
+    # Sections where every occurrence has isInitialized=false are silently skipped:
+    # they're empty form placeholders, not gaps in coverage.
     seen_tags = {child.tag.split("}")[1] for child in root}
-    unknown = sorted(seen_tags - KNOWN_SECTIONS)
+    unknown = []
+    for tag in sorted(seen_tags - KNOWN_SECTIONS):
+        for el in root.findall(ns(tag)):
+            # Skip if explicitly uninitialized or entirely empty (no children, no text)
+            if text(el, "isInitialized") == "false":
+                continue
+            if len(el) == 0 and not (el.text or "").strip():
+                continue
+            unknown.append(tag)
+            break
     if unknown:
         out["unknown_sections"] = unknown
 
