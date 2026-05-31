@@ -109,6 +109,8 @@ When asked to summarize or read a `.vaudtax` file, run `parse_vaudtax.py` and pr
 
 Amounts are in CHF unless a different `devise` is specified.
 
+**Only report what exists.** Do not list or mention sections that are empty, not initialized, or not applicable to this taxpayer — no vehicles when there are none, no CTB2 when the filer is single, no real estate when the taxpayer rents, etc. The summary should reflect what the declaration *contains*, not what it doesn't. If `parse_vaudtax.py` reports no unknown sections, say nothing about sections at all.
+
 **A summary is just a summary.** Do not run `compute_code800.py` or `calculate_taxes.py` unless the user explicitly asks for a tax estimate. Running the tax scripts uninvited adds latency and produces figures the user didn't ask for.
 
 ### Proactive cross-checks during a summary
