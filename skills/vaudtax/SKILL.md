@@ -127,6 +127,8 @@ Even for a basic summary, always cross-check attached documents against their co
 2. Compare against `salaireNet` and `cotisationOrdinaire` in the corresponding XML entry
 3. Flag any mismatch — small rounding differences (±1 CHF) are normal; larger gaps are not
 
+**Run all PDF reads in parallel.** If both checks apply (e.g. 3 VIAC attestations + 1 salary certificate = 4 PDFs), extract and read all 4 concurrently — spawn one sub-agent per document or issue the tool calls in a single parallel batch. Do not wait for one PDF to finish before starting the next.
+
 These checks take a few extra seconds but can catch real errors. Run them as part of every summary unless the user explicitly says they only want a quick overview.
 
 When verifying or cross-checking deductions, see [DEDUCTIONS.md](DEDUCTIONS.md) for official rules, caps (ICC and IFD), and the analysis checklist.
@@ -167,6 +169,8 @@ text = read_pdf("/tmp/doc.pdf", lang="deu")   # switch to German if needed
 ```
 
 `read_pdf()` tries `pdfplumber` first; falls back to `pytesseract` OCR at 200 dpi for scanned PDFs. JPEG/PNG attachments go straight to OCR. Use `lang="fra"` (default) for French documents; `"deu"` for German-only ones.
+
+**Read multiple attachments in parallel.** When the task requires reading more than one PDF (e.g. 3 VIAC attestations + 1 salary certificate), extract and read them concurrently — spawn one sub-agent per document, or issue all `open_attachment` + `read_pdf` calls in parallel rather than sequentially. Wall-clock time scales with the slowest single document, not the total count.
 
 ## Reading attached salary certificates (Certificat de salaire / Lohnausweis)
 
