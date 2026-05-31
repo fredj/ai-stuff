@@ -16,6 +16,31 @@ from pathlib import Path
 
 NS = "http://www.vd.ch/fiscalite/vaudtax"
 
+# Top-level XML sections that this script knows about (parsed, acknowledged, or intentionally skipped).
+# Any section found in the file that is not in this set is reported as unhandled.
+KNOWN_SECTIONS = {
+    # Metadata
+    "fiscalPeriod", "lastGesdemReference",
+    # Taxpayer identity
+    "identification", "taxpayerPersonalData1", "taxpayerPersonalData2", "representative",
+    # Income
+    "activiteSalarieeRevenus", "complementRentePension", "activitesIndependantes",
+    "autresRevenusExoneresImposesSource", "revenuImposeAutreEtat",
+    # Deductions
+    "autresFraisEtFraisActiviteSalarialeAccessoire", "fraisTransport", "fraisRepas",
+    "primesEtCotisationsAssurance", "deductionSocialeLogement",
+    "fraisMedicauxDentaires", "fraisMedicaux",
+    "interetsDettes", "fraisFormation", "donationsAvancesHoiries", "successionHoirieDonation",
+    # Assets
+    "etatTitres", "relevesFiscauxBancaires", "numerairesList", "objetsMobiliers",
+    "biensImmobiliers", "immeubles", "autoMoto", "fraisAdministrationTitres",
+    # Documents & tax subject info
+    "piecesJustificativesObligatoires", "piecesJustificativesFacultatives",
+    "infosComplementairesIes", "prestationsEnCapital",
+    # UI / navigation state (intentionally skipped)
+    "guidedNav", "userProfil",
+}
+
 
 def ns(tag):
     return f"{{{NS}}}{tag}"
@@ -431,6 +456,12 @@ def summarize(root):
 
     out["assets"] = assets
 
+    # Unknown sections — any top-level element not in KNOWN_SECTIONS
+    seen_tags = {child.tag.split("}")[1] for child in root}
+    unknown = sorted(seen_tags - KNOWN_SECTIONS)
+    if unknown:
+        out["unknown_sections"] = unknown
+
     # Attached documents
     # Each <documents> element has: <key> = ZIP entry name, <reference> = UUID,
     # <filename> = original name, <mimeType> = application/pdf | image/jpeg | image/png,
@@ -586,6 +617,14 @@ def print_summary(data):
         label = f" — {d['label']}" if d.get("label") else ""
         ctb = f" [{d['taxpayer'] or '?'}]" if has_ctb2 else ""
         print(f"  [{d['zip_key']}] {d['filename']} ({d['mime']}) {size}{label}{ctb}")
+
+    unknown = data.get("unknown_sections")
+    if unknown:
+        print("\n--- Sections non reconnues ---")
+        for s in unknown:
+            print(f"  {s}")
+        print("  → Ces sections ne sont pas encore gérées par le skill vaudtax.")
+        print("  → Pour signaler le problème : https://github.com/fredj/ai-stuff/issues")
 
 
 if __name__ == "__main__":

@@ -373,6 +373,59 @@ for el in root.findall(f"{{{NS}}}immeubles"):  # change section name as needed
 
 Limits and barème tables are indexed annually — verify the year matches the declaration's `fiscalPeriod`. Update PDF URLs by replacing the year suffix (e.g. `21001_2024.pdf` for fiscal year 2024).
 
+## Reporting unhandled content
+
+The skill may encounter VaudTax files from fiscal years or configurations it was not designed for — new XML sections, renamed fields, or unexpected data layouts. When this happens, always tell the user clearly and suggest opening a GitHub issue.
+
+**Triggers — report an issue when:**
+
+- `parse_vaudtax.py` output includes a **"Sections non reconnues"** block listing unknown section names.
+- A section listed as "not yet parsed" in the Key XML sections table above (e.g. `autresRevenusExoneresImposesSource`, `revenuImposeAutreEtat`, `representative`, `prestationsEnCapital`) **contains data** (i.e. `isInitialized` is not `false` and relevant child elements are non-empty) — meaning the user's declaration has content the skill can't read.
+- An `export_json.py` JSON field has an unexpected structure or a key section is `null` when it shouldn't be.
+- A script raises an exception or produces clearly wrong output (e.g. zero assets when the XML has populated `etatTitres` entries).
+
+**What to say to the user:**
+
+> This declaration contains content that the vaudtax skill doesn't handle yet: **[describe what's missing or broken]**. The analysis above may be incomplete.
+>
+> If you'd like this to be supported, please open an issue at:
+> **https://github.com/fredj/ai-stuff/issues**
+>
+> Include: the fiscal year (`fiscalPeriod`), the unknown section name(s) or field(s), and a brief description of what data they contain (no personal data needed).
+
+Do **not** silently skip unhandled content — always surface the gap to the user.
+
+## Anti-hallucination rules
+
+These rules take precedence over everything else in this skill. Tax data is sensitive — being wrong is worse than being incomplete.
+
+**Rule 1 — Every value must have a source.**
+Every number or fact stated about a declaration must trace back to one of:
+- output from a bundled script (`parse_vaudtax.py`, `export_json.py`, `compute_code800.py`, `calculate_taxes.py`), or
+- a direct XML field read shown in a code block.
+
+If neither applies, say "not found in the file" — never supply a value from general knowledge or inference.
+
+**Rule 2 — Never compute taxes without running the scripts.**
+Do not estimate ICC/IFD/fortune tax from training-data knowledge of Swiss tax formulas, barème tables, or commune coefficients. Always run `compute_code800.py` + `calculate_taxes.py`. The only acceptable exception is explaining the method conceptually when the user asks "how does this work?" — but never produce a figure that way.
+
+**Rule 3 — `None` / absent ≠ zero ≠ "not applicable".**
+A field missing from script output or reading as `None` from the XML may mean any of: not declared, genuinely zero, section not initialized, or **not yet parsed by the skill**. These are different. Report it as absent: "no value found for X" or "the script did not extract Y." Never silently substitute zero or omit the gap.
+
+**Rule 4 — Check `fiscalPeriod` before applying any year-specific rule.**
+Deduction caps, barème tables, and form field names all change by year. Read `fiscalPeriod` from the file first. Never apply 2025 limits to a 2023 or 2024 declaration without explicitly stating the assumption and flagging it as unverified.
+
+**Rule 5 — Never describe what an unhandled section "probably" contains.**
+If a section is not parsed by the skill (marked "not yet parsed" in the Key XML sections table), do not infer its contents from its name, label, or general Swiss tax knowledge. Say "this section exists in the file but is not yet handled by the skill" and follow the Reporting unhandled content procedure.
+
+**Rule 6 — Never fabricate totals.**
+Do not add up partial extracted values to produce a "total income" or "total deductions" figure unless the script explicitly outputs that total. Partial sums look authoritative and hide gaps.
+
+**Rule 7 — Never guess XML field names.**
+If you need to read a field not covered by the bundled scripts, use the discovery snippet from the "Field name discovery" section to inspect actual element names. Do not invent plausible-sounding names like `montantTotal` or `revenuBrut` — they may not exist or may mean something different.
+
+**When in doubt:** say what you found, say what you couldn't find, and let the user decide. "The file has a `prestationsEnCapital` section but the skill can't read it yet — see https://github.com/fredj/ai-stuff/issues to request support" is always a correct answer.
+
 ## Guardrails
 
 - **Estimates vs official figures.** `compute_code800.py` output is an estimate. When a `lastGesdemReference` or an official bordereau is available, those figures take precedence. Never present script output as the authoritative tax due.
