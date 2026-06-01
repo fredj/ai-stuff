@@ -16,7 +16,7 @@ A `.vaudtax` file is a **ZIP archive** containing:
 
 ## Bundled scripts
 
-All scripts live in `${CLAUDE_SKILL_DIR}/scripts/` and use only Python standard library — no installs needed.
+All scripts live in the `scripts/` subdirectory of this skill and use only Python standard library — no installs needed.
 
 | Script | Purpose |
 |---|---|
@@ -25,12 +25,12 @@ All scripts live in `${CLAUDE_SKILL_DIR}/scripts/` and use only Python standard 
 | `compute_code800.py <file.vaudtax>` | Estimate revenu imposable ICC (code 800), IFD, and fortune — outputs values ready to pass to `calculate_taxes.py` |
 | `calculate_taxes.py --periode YEAR --commune NAME --revenu-icc N --fortune-icc N --revenu-ifd N` | Query the official Canton Vaud tax calculator via HTTP POST and return authoritative results |
 
-The JSON output conforms to **`${CLAUDE_SKILL_DIR}/vaudtax-export.schema.json`** (JSON Schema 2020-12).
+The JSON output conforms to **`vaudtax-export.schema.json`** (JSON Schema 2020-12; file is in the skill root).
 
 ```bash
-cd "${CLAUDE_SKILL_DIR}/scripts"
-python parse_vaudtax.py /path/to/file.vaudtax
-python export_json.py  /path/to/file.vaudtax
+SCRIPTS=$(find ~ -name parse_vaudtax.py -path '*/vaudtax/*' 2>/dev/null | head -1 | xargs dirname)
+python "$SCRIPTS/parse_vaudtax.py" /path/to/file.vaudtax
+python "$SCRIPTS/export_json.py"   /path/to/file.vaudtax
 ```
 
 ## Key XML sections
@@ -147,7 +147,7 @@ See [`references/tax-computation.md`](references/tax-computation.md) for ICC and
 
 ## Reading attached PDFs
 
-Use the bundled `${CLAUDE_SKILL_DIR}/scripts/pdf_utils.py`:
+Use the bundled `pdf_utils.py` (in the skill's `scripts/` directory):
 
 ```python
 from pdf_utils import read_pdf, extract_form21_totals, identify_taxpayer
