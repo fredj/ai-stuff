@@ -108,16 +108,16 @@ Amounts are in CHF unless a different `devise` is specified.
 
 ### Proactive cross-checks
 
-Even for a basic summary, always cross-check attached documents against their XML values — discrepancies are high-value findings the user needs before filing. **Run all PDF reads in parallel** (spawn one sub-agent per document or issue all `open_attachment` + `read_pdf` calls in a single parallel batch).
+Even for a basic summary, always cross-check attached documents against their XML values — discrepancies are high-value findings the user needs before filing. **Read all attachments in parallel** (extract and read each document concurrently — wall-clock time scales with the slowest single document, not the total count).
 
 **Pillar 3a attestations** (label contains "21 EDP", "cotisations", or "pilier 3a"):
-1. Read each PDF with `read_pdf()` + `extract_form21_totals()` (or `extract_postfinance_3a()` for PostFinance) — see [`references/pillar-attestation.md`](references/pillar-attestation.md)
+1. Extract each attachment with `open_attachment()` and read the file at the extracted path — see [`references/pillar-attestation.md`](references/pillar-attestation.md) for field layout
 2. Sum per taxpayer; compare against `formesReconnuesPrevoyanceIndividuelleContribuable1` / `...Contribuable2`
 3. Flag any discrepancy: **"⚠ Écart pilier 3a : attestations CHF X, déclaration CHF Y — vérifier avant envoi"**
 
 **Salary certificates** (label contains "Certificat de salaire"):
-1. Read the PDF and extract line 11 (salaire net) and line 10.1 (LPP) — see [`references/salary-certificate.md`](references/salary-certificate.md)
-2. Compare against `salaireNet` and `cotisationOrdinaire` in the XML
+1. Extract the attachment with `open_attachment()` and read the file at the extracted path — see [`references/salary-certificate.md`](references/salary-certificate.md) for field layout
+2. Extract line 11 (salaire net) and line 10.1 (LPP); compare against `salaireNet` and `cotisationOrdinaire` in the XML
 3. Flag any mismatch beyond ±1 CHF rounding
 
 Skip the cross-checks only if the user explicitly asks for a quick overview.
@@ -145,37 +145,22 @@ This makes two HTTP calls and returns the marginal rate for ICC, IFD, and the co
 
 See [`references/tax-computation.md`](references/tax-computation.md) for ICC and IFD formulas.
 
-## Reading attached PDFs
+## Extracting and reading attached files
 
-Use the bundled `pdf_utils.py` (in the skill's `scripts/` directory):
-
-```python
-from pdf_utils import read_pdf, extract_form21_totals, identify_taxpayer
-
-text = read_pdf("/tmp/doc.pdf")               # text PDF or scanned — handled automatically
-text = read_pdf("/tmp/doc.pdf", lang="deu")   # switch to German if needed
-```
-
-`read_pdf()` tries `pdfplumber` first; falls back to `pytesseract` OCR at 200 dpi. Use `lang="fra"` (default) for French, `"deu"` for German.
-
-**Read multiple attachments in parallel** — spawn one sub-agent per document or issue all `open_attachment` + `read_pdf` calls concurrently. Wall-clock time scales with the slowest single document, not the total count.
-
-For salary certificate field layout → [`references/salary-certificate.md`](references/salary-certificate.md)
-For Form 21 EDP pillar attestation structure → [`references/pillar-attestation.md`](references/pillar-attestation.md)
-
-## Extracting attached files
-
-Always use the `open_attachment()` context manager from `parse_vaudtax.py` — it extracts to a temp file and deletes it on exit:
+Use the `open_attachment()` context manager from `parse_vaudtax.py` — it extracts to a temp file and deletes it on exit. Then read the file at the extracted path using your agent's native file reading capability (PDF and image reading is handled natively — no external tools needed):
 
 ```python
 from parse_vaudtax import open_attachment
-from pdf_utils import read_pdf
 
 with open_attachment("file.vaudtax", "doc17700000000000", suffix=".pdf") as path:
-    text = read_pdf(path)
+    # read the file at `path` natively
+    ...
 ```
 
 Use the `<key>` value (not the `<reference>` UUID) to match XML metadata to ZIP entries. Each `<documents>` element has: `<key>`, `<filename>`, `<mimeType>`, `<label>`, `<fileSize>`.
+
+For salary certificate field layout → [`references/salary-certificate.md`](references/salary-certificate.md)
+For Form 21 EDP pillar attestation structure → [`references/pillar-attestation.md`](references/pillar-attestation.md)
 
 ## VaudTax XML Schema
 
