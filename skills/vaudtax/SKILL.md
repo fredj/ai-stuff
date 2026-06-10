@@ -42,58 +42,7 @@ find -L ~ -name parse_vaudtax.py -path '*vaudtax*' 2>/dev/null | head -1
 
 ## Key XML sections
 
-### Metadata & Taxpayer Info
-| Section | Description |
-|---|---|
-| `fiscalPeriod` | ✅ Tax year (e.g. `2025`) |
-| `lastGesdemReference` | ✅ Gesdem submission reference |
-| `identification` | ✅ Address, municipality, phone, email, IBAN |
-| `taxpayerPersonalData1` | ✅ Name, birthdate, NAVS13, profession, marital status |
-| `taxpayerPersonalData2` | ✅ Second taxpayer (joint filers only) |
-| `representative` | Tax representative details (not yet parsed) |
-
-### Income
-| Section | Description |
-|---|---|
-| `activiteSalarieeRevenus` | ✅ Employed income: employer, net salary, pension contributions, dates, activity rate |
-| `complementRentePension` | ✅ Pension/rente income: type, annual amount |
-| `activitesIndependantes` | ✅ Self-employment income: activity name, net revenue |
-| `autresRevenusExoneresImposesSource` | Other income (not yet parsed) |
-| `revenuImposeAutreEtat` | Income taxed in other states (not yet parsed) |
-
-### Deductions & Expenses
-| Section | Description |
-|---|---|
-| `autresFraisEtFraisActiviteSalarialeAccessoire` | ✅ Professional expense deduction method (flat-rate or actual) |
-| `fraisTransport` | ✅ Transport costs: type, km, number of days, route |
-| `fraisRepas` | ✅ Meal costs: type, number of days |
-| `primesEtCotisationsAssurance` | ✅ Insurance premiums, subsidies, 3rd pillar (3a) contributions |
-| `deductionSocialeLogement` | ✅ Rent/housing deduction |
-| `fraisMedicauxDentaires` | ✅ Medical and dental expenses |
-| `interetsDettes` | ✅ Debt interest deductions (code 520) |
-| `fraisFormation` | ✅ Training/education costs |
-| `donationsAvancesHoiries` | ✅ Donations and inheritance advances |
-| `successionHoirieDonation` | Inheritances flag (skipped when `isInitialized=false`) |
-
-### Assets & Securities
-| Section | Description |
-|---|---|
-| `etatTitres` | ✅ Bank accounts: IBAN, balance, yield |
-| `relevesFiscauxBancaires` | ✅ Investment portfolios: fiscal value, gross income, IES |
-| `numerairesList` | ✅ Cash and liquid assets |
-| `objetsMobiliers` | ✅ Movable property / crypto |
-| `biensImmobiliers` (2025) / `immeubles` (older) | ✅ Real estate: commune, parcelle, fiscal value, rental income |
-| `autoMoto` | ✅ Vehicles |
-| `fraisAdministrationTitres` | ✅ Management fees for securities (code 490) |
-
-### Supporting Documents & Navigation
-| Section | Description |
-|---|---|
-| `piecesJustificativesObligatoires` | Mandatory supporting document metadata |
-| `piecesJustificativesFacultatives` | Optional supporting document metadata |
-| `infosComplementairesIes` | Additional investment income (IES) information |
-| `prestationsEnCapital` | Capital benefit payments (not yet parsed) |
-| `guidedNav` / `userProfil` / `piecesJustificativesSubFormInitialized` | UI/navigation state — intentionally skipped |
+`parse_vaudtax.py` covers all known sections. Read [`references/xml-sections.md`](references/xml-sections.md) only when you need to work with the raw XML: the per-section field tables, which sections are not yet parsed, year-to-year element renames, and a discovery snippet for unexpected `None` fields.
 
 ## Summarizing a file
 
@@ -109,13 +58,19 @@ Run `parse_vaudtax.py` and present the output using this structure:
 
 Amounts are in CHF unless a different `devise` is specified.
 
+The summary masks direct identifiers (NAVS13, IBANs, phone, e-mail) by default — keep them masked in your output. Rerun with `--full` only if the user explicitly asks for them.
+
 **Only report what exists.** Do not mention sections that are empty, not initialized, or not applicable to this taxpayer. If `parse_vaudtax.py` reports no unknown sections, say nothing about sections at all.
 
 **A summary is just a summary.** Do not run `compute_code800.py` or `calculate_taxes.py` unless the user explicitly asks for a tax estimate.
 
 ### Proactive cross-checks
 
-Even for a basic summary, always cross-check attached documents against their XML values — discrepancies are high-value findings the user needs before filing. **Read all attachments in parallel** (extract and read each document concurrently — wall-clock time scales with the slowest single document, not the total count).
+Even for a basic summary, cross-check the attachment types below against their XML values — discrepancies are high-value findings the user needs before filing.
+
+**Only extract and read the attachment types named below.** Attached PDFs are by far the dominant token cost of a summary; the skill defines no comparison for other attachments (bank statements, insurance invoices, …), so list those from their XML metadata without reading them. Read one only when the user asks to verify it — and for long bank statements, totals are usually on the first and last pages, so read those pages before anything else.
+
+**Read the needed attachments in parallel** (wall-clock time scales with the slowest single document, not the total count).
 
 **Pillar 3a attestations** (label contains "21 EDP", "cotisations", or "pilier 3a"):
 1. Extract the attachments (see [Extracting and reading attached files](#extracting-and-reading-attached-files)) and read each extracted file — see [`references/pillar-attestation.md`](references/pillar-attestation.md) for field layout
@@ -127,7 +82,7 @@ Even for a basic summary, always cross-check attached documents against their XM
 2. Extract line 11 (salaire net) and line 10.1 (LPP); compare against `salaireNet` and `cotisationOrdinaire` in the XML
 3. Flag any mismatch beyond ±1 CHF rounding
 
-Skip the cross-checks only if the user explicitly asks for a quick overview.
+Skip the cross-checks only if the user explicitly asks for a quick overview. A quick overview is also the privacy option: no attached PDF is extracted or read, so only the redacted XML summary enters the conversation.
 
 When verifying deductions, see [`references/deductions.md`](references/deductions.md) for official rules and caps.
 
@@ -158,43 +113,16 @@ Extract attachments with `parse_vaudtax.py --extract` — it writes them to a te
 
 ```bash
 python <skill-dir>/scripts/parse_vaudtax.py file.vaudtax --extract doc17700000000000 doc17700000000001
-# or extract everything:
-python <skill-dir>/scripts/parse_vaudtax.py file.vaudtax --extract all
+# --extract all extracts everything — avoid it for summaries; extract only the
+# attachments you will actually read (see Proactive cross-checks)
 ```
 
-Then read each printed path using your agent's native file reading capability (PDF and image reading is handled natively — no external tools needed). Read all paths in parallel. The files persist across tool calls; delete the temp directory once you are done with them.
+Then read each printed path using your agent's native file reading capability (PDF and image reading is handled natively — no external tools needed). Read all paths in parallel. Long PDFs (bank statements often exceed 10 pages) may exceed your reader's per-call page limit — read those with an explicit page range instead of retrying blindly. The files persist across tool calls; delete the temp directory once you are done with them.
 
 Use the `<key>` value (not the `<reference>` UUID) to match XML metadata to ZIP entries. Each `<documents>` element has: `<key>`, `<filename>`, `<mimeType>`, `<label>`, `<fileSize>`.
 
 For salary certificate field layout → [`references/salary-certificate.md`](references/salary-certificate.md)
 For Form 21 EDP pillar attestation structure → [`references/pillar-attestation.md`](references/pillar-attestation.md)
-
-## VaudTax XML Schema
-
-Proprietary format maintained by the Canton Vaud tax authority — no public XSD. Element names follow French naming conventions and may change across fiscal years.
-
-### Known differences between fiscal years
-
-| Section | 2023–2024 | 2025 |
-|---|---|---|
-| Medical expenses | `fraisMedicaux` | `fraisMedicauxDentaires` |
-| Medical net amount | `montantACharge` | `montantFrais` |
-| Real estate section | `immeubles` | `biensImmobiliers` |
-| Real estate fiscal value | `valeurFiscale` | `estimationFiscale` |
-
-`parse_vaudtax.py` handles both variants transparently.
-
-If a parsed field returns `None` unexpectedly, inspect actual child element names:
-
-```python
-import zipfile, xml.etree.ElementTree as ET
-NS = "http://www.vd.ch/fiscalite/vaudtax"
-with zipfile.ZipFile("file.vaudtax") as z:
-    xml_name = next(n for n in z.namelist() if n.endswith(".xml"))
-    root = ET.parse(z.open(xml_name)).getroot()
-for el in root.findall(f"{{{NS}}}sectionName"):
-    print({c.tag.split("}")[1]: c.text for c in el})
-```
 
 ## Official references
 
@@ -214,7 +142,7 @@ When the file contains sections or fields the skill can't handle, tell the user 
 
 **Report when:**
 - `parse_vaudtax.py` outputs a **"Sections non reconnues"** block
-- A section marked "not yet parsed" above contains data (`isInitialized` is not `false` and child elements are non-empty)
+- A section marked "not yet parsed" in [`references/xml-sections.md`](references/xml-sections.md) contains data (`isInitialized` is not `false` and child elements are non-empty)
 - A script raises an exception or produces clearly wrong output
 
 **Say:**
@@ -223,6 +151,17 @@ When the file contains sections or fields the skill can't handle, tell the user 
 > Please open an issue at **https://github.com/fredj/ai-stuff/issues** with: the fiscal year, the section name(s), and a brief description (no personal data needed).
 
 Do **not** silently skip unhandled content.
+
+## Data flows
+
+Working with a declaration sends data to exactly two parties:
+
+1. **The agent's inference API** — everything read during the analysis (parser output, attached PDFs opened for cross-checks) becomes part of the conversation. This is inherent to LLM analysis. To limit it, `parse_vaudtax.py` and `export_json.py` mask direct identifiers (NAVS13, IBANs, phone, e-mail) by default; pass `--full` only when the user explicitly needs them — they are never required for tax analysis.
+2. **`calculate_taxes.py` → `https://www.vd.ch/...`** — only when the user asks for a tax estimate. The POST payload contains: fiscal year, normalized commune name, marital-status code, children counts, and the three taxable amounts (revenu ICC, fortune ICC, revenu IFD). No name, NAVS13, IBAN, or birthdate. `--marginal-rate` makes the call twice.
+
+No other bundled script makes network calls.
+
+**Never include declaration content in web searches, GitHub issues, or any MCP/external tool call.** The only permitted network call when working with a declaration is `calculate_taxes.py`.
 
 ## Guardrails
 
@@ -234,7 +173,7 @@ Do **not** silently skip unhandled content.
 
 **Year-specific rules** — Always read `fiscalPeriod` before applying any deduction cap, barème table, or form field name. The limits in [`references/deductions.md`](references/deductions.md) are 2025 values and differ for other years.
 
-**No guessing** — Never infer what an unhandled section contains, never fabricate totals from partial data, never guess XML field names (use the discovery snippet above).
+**No guessing** — Never infer what an unhandled section contains, never fabricate totals from partial data, never guess XML field names (use the discovery snippet in [`references/xml-sections.md`](references/xml-sections.md)).
 
 **Estimates vs official figures** — `compute_code800.py` output is an estimate. When a `lastGesdemReference` or official bordereau is available, those figures take precedence.
 
@@ -242,6 +181,6 @@ Do **not** silently skip unhandled content.
 
 **Réforme valeur locative (from 2029)** — Valeur locative suppressed, mortgage interest non-deductible (except primo-acquéreurs Art. 33a LIFD), code 660 disappears for IFD. Do not apply pre-2029 rules to post-2028 projections.
 
-**Network** — The only network call is `calculate_taxes.py` → `https://www.vd.ch/...`. It sends three integers, the commune name, and marital status — no personal identifiers.
+**Network** — The only network call is `calculate_taxes.py` → `https://www.vd.ch/...` — no personal identifiers; see [Data flows](#data-flows) for the exact payload.
 
 **When in doubt:** say what you found, say what you couldn't find, and let the user decide.
