@@ -4,8 +4,12 @@ Analyse un fichier .vaudtax et affiche un résumé lisible.
 
 Usage :
     python parse_vaudtax.py <fichier.vaudtax>
+    python parse_vaudtax.py <fichier.vaudtax> --full
     python parse_vaudtax.py <fichier.vaudtax> --extract all [--outdir DIR]
     python parse_vaudtax.py <fichier.vaudtax> --extract doc17700000000000 ...
+
+Les identifiants directs (NAVS13, IBAN, téléphone, e-mail) sont masqués par
+défaut dans le résumé ; --full les affiche en clair.
 """
 
 import argparse
@@ -70,6 +74,47 @@ def format_navs13(raw):
     if raw and len(raw) == 13 and raw.isdigit():
         return f"{raw[0:3]}.{raw[3:7]}.{raw[7:11]}.{raw[11:13]}"
     return raw
+
+
+def mask_navs13(formatted):
+    """Mask a formatted NAVS13 (XXX.XXXX.XXXX.XX), keeping prefix and last group."""
+    if formatted and len(formatted) == 16:
+        return f"{formatted[:3]}.****.****.{formatted[-2:]}"
+    return formatted and "***"
+
+
+def mask_iban(iban):
+    """Mask an IBAN, keeping the country+check digits and the last 4 characters."""
+    if not iban:
+        return iban
+    compact = iban.replace(" ", "")
+    if len(compact) <= 8:
+        return "****"
+    return f"{compact[:4]}…{compact[-4:]}"
+
+
+def redact_identifiers(data):
+    """Mask direct identifiers in a summarize() dict, in place.
+
+    Masks NAVS13 and IBANs, removes phone and e-mail. Amounts are untouched —
+    they are the point of the analysis; the identifiers are not.
+    """
+    ident = data.get("identification")
+    if ident:
+        ident["email"] = None
+        ident["phone"] = None
+        ident["iban"] = mask_iban(ident.get("iban"))
+    for tp_key in ("taxpayer", "taxpayer2"):
+        tp = data.get(tp_key)
+        if tp:
+            tp["navs13"] = mask_navs13(tp.get("navs13"))
+    ies = data.get("tax_subject_info")
+    if ies:
+        ies["refund_account_iban"] = mask_iban(ies.get("refund_account_iban"))
+    for a in data.get("assets", []):
+        if a.get("iban"):
+            a["iban"] = mask_iban(a["iban"])
+    return data
 
 
 def open_vaudtax(path):
@@ -510,8 +555,10 @@ def print_summary(data):
     print("\n--- Identification ---")
     print(f"Adresse : {ident.get('street')} {ident.get('house_number')}, {ident.get('zip')} {ident.get('locality')}")
     print(f"Commune : {ident.get('commune')}")
-    print(f"E-mail  : {ident.get('email')}")
-    print(f"Tél.    : {ident.get('phone')}")
+    if ident.get("email"):
+        print(f"E-mail  : {ident.get('email')}")
+    if ident.get("phone"):
+        print(f"Tél.    : {ident.get('phone')}")
     print(f"IBAN    : {ident.get('iban')}")
 
     tp = data.get("taxpayer", {})
@@ -646,10 +693,16 @@ if __name__ == "__main__":
                     help="extrait les pièces jointes par clé ZIP ('all' pour toutes) "
                          "et affiche un chemin par ligne au lieu du résumé")
     ap.add_argument("--outdir", help="répertoire de sortie (défaut : répertoire temporaire)")
+    ap.add_argument("--full", action="store_true",
+                    help="affiche les identifiants en clair (NAVS13, IBAN, téléphone, e-mail) ; "
+                         "masqués par défaut")
     args = ap.parse_args()
     if args.extract:
         for p in extract_attachments(args.file, args.extract, args.outdir):
             print(p)
     else:
         root, pdfs = open_vaudtax(args.file)
-        print_summary(summarize(root))
+        data = summarize(root)
+        if not args.full:
+            redact_identifiers(data)
+        print_summary(data)

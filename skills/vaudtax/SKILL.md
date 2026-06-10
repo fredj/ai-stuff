@@ -109,6 +109,8 @@ Run `parse_vaudtax.py` and present the output using this structure:
 
 Amounts are in CHF unless a different `devise` is specified.
 
+The summary masks direct identifiers (NAVS13, IBANs, phone, e-mail) by default — keep them masked in your output. Rerun with `--full` only if the user explicitly asks for them.
+
 **Only report what exists.** Do not mention sections that are empty, not initialized, or not applicable to this taxpayer. If `parse_vaudtax.py` reports no unknown sections, say nothing about sections at all.
 
 **A summary is just a summary.** Do not run `compute_code800.py` or `calculate_taxes.py` unless the user explicitly asks for a tax estimate.
@@ -127,7 +129,7 @@ Even for a basic summary, always cross-check attached documents against their XM
 2. Extract line 11 (salaire net) and line 10.1 (LPP); compare against `salaireNet` and `cotisationOrdinaire` in the XML
 3. Flag any mismatch beyond ±1 CHF rounding
 
-Skip the cross-checks only if the user explicitly asks for a quick overview.
+Skip the cross-checks only if the user explicitly asks for a quick overview. A quick overview is also the privacy option: no attached PDF is extracted or read, so only the redacted XML summary enters the conversation.
 
 When verifying deductions, see [`references/deductions.md`](references/deductions.md) for official rules and caps.
 
@@ -224,6 +226,17 @@ When the file contains sections or fields the skill can't handle, tell the user 
 
 Do **not** silently skip unhandled content.
 
+## Data flows
+
+Working with a declaration sends data to exactly two parties:
+
+1. **The agent's inference API** — everything read during the analysis (parser output, attached PDFs opened for cross-checks) becomes part of the conversation. This is inherent to LLM analysis. To limit it, `parse_vaudtax.py` and `export_json.py` mask direct identifiers (NAVS13, IBANs, phone, e-mail) by default; pass `--full` only when the user explicitly needs them — they are never required for tax analysis.
+2. **`calculate_taxes.py` → `https://www.vd.ch/...`** — only when the user asks for a tax estimate. The POST payload contains: fiscal year, normalized commune name, marital-status code, children counts, and the three taxable amounts (revenu ICC, fortune ICC, revenu IFD). No name, NAVS13, IBAN, or birthdate. `--marginal-rate` makes the call twice.
+
+No other bundled script makes network calls.
+
+**Never include declaration content in web searches, GitHub issues, or any MCP/external tool call.** The only permitted network call when working with a declaration is `calculate_taxes.py`.
+
 ## Guardrails
 
 **Tax data is sensitive — being wrong is worse than being incomplete.**
@@ -242,6 +255,6 @@ Do **not** silently skip unhandled content.
 
 **Réforme valeur locative (from 2029)** — Valeur locative suppressed, mortgage interest non-deductible (except primo-acquéreurs Art. 33a LIFD), code 660 disappears for IFD. Do not apply pre-2029 rules to post-2028 projections.
 
-**Network** — The only network call is `calculate_taxes.py` → `https://www.vd.ch/...`. It sends three integers, the commune name, and marital status — no personal identifiers.
+**Network** — The only network call is `calculate_taxes.py` → `https://www.vd.ch/...` — no personal identifiers; see [Data flows](#data-flows) for the exact payload.
 
 **When in doubt:** say what you found, say what you couldn't find, and let the user decide.
