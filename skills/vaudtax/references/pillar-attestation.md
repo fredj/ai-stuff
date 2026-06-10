@@ -1,22 +1,15 @@
 # Pillar Attestation (Form 21 EDP / Attestation cotisations de prévoyance)
 
-Official federal form 21 EDP (trilingual DE/FR/IT), issued by bank foundations and insurance companies for 2nd pillar and 3a accounts. Read with `read_pdf()` from `pdf_utils.py`.
+Official federal form 21 EDP (trilingual DE/FR/IT), issued by bank foundations and insurance companies for 2nd pillar and 3a accounts. Read the extracted PDF natively (agent file reading — no external tools needed).
 
 ## Extraction
 
-```python
-from pdf_utils import read_pdf, extract_form21_totals, extract_postfinance_3a
+Locate totals by their labels, not by field letter (letters vary between editions):
 
-text = read_pdf("/tmp/doc.pdf")
+- **3a contributions:** the line `Total des cotisations au pilier 3a` (DE: `Total Beiträge an die Säule 3a`)
+- **3a buy-ins (rachats):** the line `Total des rachats au pilier 3a`
 
-if "Form. 21 EDP" in text:
-    contributions, rachats = extract_form21_totals(text) or (None, None)
-else:
-    # PostFinance "Attestation fiscale" format
-    contributions = extract_postfinance_3a(text)
-```
-
-`extract_form21_totals()` returns `(contributions, rachats)` as integers in CHF, or `None`. It matches totals by content ("Total … Säule 3a / pilier 3a"), not by field letter (which varies between editions).
+Some institutions (e.g. PostFinance) issue an "Attestation fiscale" instead of Form 21 EDP — take the annual 3a contribution total from it the same way.
 
 ## Form editions
 
@@ -25,7 +18,7 @@ else:
 | 2025 (current) | field **q** | field **x** | field **c** |
 | 2011 | field **r** | field **s** | field **d** |
 
-Do not rely on field letters for extraction — use `extract_form21_totals()`.
+Do not rely on field letters for extraction — locate the totals by their labels (see Extraction above).
 
 ## Structure
 
@@ -47,22 +40,16 @@ Do not rely on field letters for extraction — use `extract_form21_totals()`.
 
 ## Taxpayer attribution (joint filers)
 
-```python
-from pdf_utils import identify_taxpayer
-
-ctb1 = {"navs13": "756.XXXX.XXXX.XX", "birthdate": "YYYY-MM-DD", "last_name": "Dupont", "first_name": "Jean"}
-ctb2 = {"navs13": "756.XXXX.XXXX.YY", "birthdate": "YYYY-MM-DD", "last_name": "Martin", "first_name": "Marie"}
-taxpayer = identify_taxpayer(text, ctb1, ctb2)  # returns "CTB1", "CTB2", or None
-```
+Match the document to a taxpayer by comparing the AVS number (field b), birthdate (field c), and name block against `taxpayerPersonalData1` / `taxpayerPersonalData2`. If none match, say so rather than guessing.
 
 ## Cross-checking against the declaration
 
 1. Extract all attestation PDFs (label contains "cotisations", "21 EDP", or "pilier 3a")
-2. Read each with `read_pdf()`, detect format, extract totals
-3. For joint filers, call `identify_taxpayer()` per document
+2. Read each natively, detect format, extract totals
+3. For joint filers, attribute each document to a taxpayer (see above)
 4. Sum per taxpayer and compare:
    - CTB1 sum → `formesReconnuesPrevoyanceIndividuelleContribuable1`
    - CTB2 sum → `formesReconnuesPrevoyanceIndividuelleContribuable2`
 5. Discrepancy → likely a missing attestation or data-entry error
 
-A taxpayer may hold several 3a accounts — each produces a separate attestation.
+A taxpayer may hold several 3a accounts — each produces a separate attestation. Multiple accounts at the same institution usually carry sequential contract numbers (e.g. `….01`, `….02`, `….04`); a gap in the sequence points to the likely missing attestation — name it when flagging a discrepancy.

@@ -20,17 +20,24 @@ All scripts live in the `scripts/` subdirectory of this skill and use only Pytho
 
 | Script | Purpose |
 |---|---|
-| `parse_vaudtax.py <file.vaudtax>` | Parse and print a human-readable summary to stdout |
+| `parse_vaudtax.py <file.vaudtax>` | Parse and print a human-readable summary to stdout; `--extract` writes attachments to disk |
 | `export_json.py <file.vaudtax> [out.json]` | Export clean JSON (omits UI/navigation state) |
 | `compute_code800.py <file.vaudtax>` | Estimate revenu imposable ICC (code 800), IFD, and fortune — outputs values ready to pass to `calculate_taxes.py` |
 | `calculate_taxes.py --periode YEAR --commune NAME --revenu-icc N --fortune-icc N --revenu-ifd N` | Query the official Canton Vaud tax calculator via HTTP POST and return authoritative results |
 
 The JSON output conforms to **`vaudtax-export.schema.json`** (JSON Schema 2020-12; file is in the skill root).
 
+`<skill-dir>` below is this skill's base directory, announced when the skill is loaded — use it directly:
+
 ```bash
-SCRIPTS=$(find ~ -name parse_vaudtax.py -path '*/vaudtax/*' 2>/dev/null | head -1 | xargs dirname)
-python "$SCRIPTS/parse_vaudtax.py" /path/to/file.vaudtax
-python "$SCRIPTS/export_json.py"   /path/to/file.vaudtax
+python <skill-dir>/scripts/parse_vaudtax.py /path/to/file.vaudtax
+python <skill-dir>/scripts/export_json.py  /path/to/file.vaudtax
+```
+
+Only if the base directory is unknown, locate the scripts with `find -L` (the `-L` is required: skill directories are often symlinks, which plain `find` does not descend into):
+
+```bash
+find -L ~ -name parse_vaudtax.py -path '*vaudtax*' 2>/dev/null | head -1
 ```
 
 ## Key XML sections
@@ -111,12 +118,12 @@ Amounts are in CHF unless a different `devise` is specified.
 Even for a basic summary, always cross-check attached documents against their XML values — discrepancies are high-value findings the user needs before filing. **Read all attachments in parallel** (extract and read each document concurrently — wall-clock time scales with the slowest single document, not the total count).
 
 **Pillar 3a attestations** (label contains "21 EDP", "cotisations", or "pilier 3a"):
-1. Extract each attachment with `open_attachment()` and read the file at the extracted path — see [`references/pillar-attestation.md`](references/pillar-attestation.md) for field layout
+1. Extract the attachments (see [Extracting and reading attached files](#extracting-and-reading-attached-files)) and read each extracted file — see [`references/pillar-attestation.md`](references/pillar-attestation.md) for field layout
 2. Sum per taxpayer; compare against `formesReconnuesPrevoyanceIndividuelleContribuable1` / `...Contribuable2`
 3. Flag any discrepancy: **"⚠ Écart pilier 3a : attestations CHF X, déclaration CHF Y — vérifier avant envoi"**
 
 **Salary certificates** (label contains "Certificat de salaire"):
-1. Extract the attachment with `open_attachment()` and read the file at the extracted path — see [`references/salary-certificate.md`](references/salary-certificate.md) for field layout
+1. Extract the attachment (see [Extracting and reading attached files](#extracting-and-reading-attached-files)) and read the extracted file — see [`references/salary-certificate.md`](references/salary-certificate.md) for field layout
 2. Extract line 11 (salaire net) and line 10.1 (LPP); compare against `salaireNet` and `cotisationOrdinaire` in the XML
 3. Flag any mismatch beyond ±1 CHF rounding
 
@@ -147,15 +154,15 @@ See [`references/tax-computation.md`](references/tax-computation.md) for ICC and
 
 ## Extracting and reading attached files
 
-Use the `open_attachment()` context manager from `parse_vaudtax.py` — it extracts to a temp file and deletes it on exit. Then read the file at the extracted path using your agent's native file reading capability (PDF and image reading is handled natively — no external tools needed):
+Extract attachments with `parse_vaudtax.py --extract` — it writes them to a temp directory and prints one path per line:
 
-```python
-from parse_vaudtax import open_attachment
-
-with open_attachment("file.vaudtax", "doc17700000000000", suffix=".pdf") as path:
-    # read the file at `path` natively
-    ...
+```bash
+python <skill-dir>/scripts/parse_vaudtax.py file.vaudtax --extract doc17700000000000 doc17700000000001
+# or extract everything:
+python <skill-dir>/scripts/parse_vaudtax.py file.vaudtax --extract all
 ```
+
+Then read each printed path using your agent's native file reading capability (PDF and image reading is handled natively — no external tools needed). Read all paths in parallel. The files persist across tool calls; delete the temp directory once you are done with them.
 
 Use the `<key>` value (not the `<reference>` UUID) to match XML metadata to ZIP entries. Each `<documents>` element has: `<key>`, `<filename>`, `<mimeType>`, `<label>`, `<fileSize>`.
 

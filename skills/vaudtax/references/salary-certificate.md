@@ -1,6 +1,6 @@
 # Salary Certificate (Certificat de salaire / Lohnausweis)
 
-Standardized federal form 11, issued by all employers. Read with `read_pdf()` from `pdf_utils.py`.
+Standardized federal form 11, issued by all employers. Read the extracted PDF natively (agent file reading — no external tools needed).
 
 ## Numbered fields
 
@@ -43,7 +43,7 @@ Only a subset is retained in the XML: employer name (`employeur`), line 10.1 (`c
 
 ## Cross-checking against the declaration
 
-1. Extract the PDF with `open_attachment()`; read with `read_pdf()`
+1. Extract the PDF with `parse_vaudtax.py --extract`; read it natively
 2. Extract: field C (NAVS13 + birthdate), D (year), E (from/to), employer, lines 10.1, 11, 13.3, 15
 3. Compare against XML — mismatches to flag:
    - line 11 ≠ `salaireNet` (beyond ±1 CHF rounding)
