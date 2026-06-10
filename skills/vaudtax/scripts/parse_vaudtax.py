@@ -4,14 +4,15 @@ Analyse un fichier .vaudtax et affiche un résumé lisible.
 
 Usage :
     python parse_vaudtax.py <fichier.vaudtax>
+    python parse_vaudtax.py <fichier.vaudtax> --extract all [--outdir DIR]
+    python parse_vaudtax.py <fichier.vaudtax> --extract doc17700000000000 ...
 """
 
-import sys
+import argparse
 import zipfile
 import xml.etree.ElementTree as ET
 import itertools
 import tempfile
-from contextlib import contextmanager
 from pathlib import Path
 
 NS = "http://www.vd.ch/fiscalite/vaudtax"
@@ -81,32 +82,32 @@ def open_vaudtax(path):
     return tree.getroot(), pdfs
 
 
-def extract_attachment(vaudtax_path, zip_key, output_path):
-    """Extract a single attachment by its ZIP key (e.g. 'doc17700000000000').
-    Works for PDFs, JPEG images, and PNG images."""
-    with zipfile.ZipFile(vaudtax_path) as z:
-        with z.open(zip_key) as src:
-            Path(output_path).write_bytes(src.read())
+def extract_attachments(vaudtax_path, keys, outdir=None):
+    """Extract attachments by ZIP key (e.g. 'doc17700000000000') and return their paths.
 
-
-@contextmanager
-def open_attachment(vaudtax_path, zip_key, suffix=None):
-    """Extract an attachment to a temp file, yield its path, then delete it.
-
-    Usage:
-        with open_attachment("file.vaudtax", "doc17700000000000", suffix=".pdf") as path:
-            text = read_pdf(path)
+    keys: list of ZIP keys, or ["all"] for every attachment.
+    Files persist until the caller deletes them; each is named
+    <key>_<original filename> so the name stays unique and readable.
+    Works for PDFs, JPEG images, and PNG images.
     """
-    if suffix is None:
-        suffix = Path(zip_key).suffix or ".tmp"
-    tmp = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
-    tmp_path = Path(tmp.name)
-    tmp.close()
-    try:
-        extract_attachment(vaudtax_path, zip_key, tmp_path)
-        yield str(tmp_path)
-    finally:
-        tmp_path.unlink(missing_ok=True)
+    root, _ = open_vaudtax(vaudtax_path)
+    index = {}
+    for doc in root.findall(f".//{ns('documents')}"):
+        key = text(doc, "key")
+        if key:
+            index[key] = text(doc, "filename") or key
+    if keys == ["all"]:
+        keys = list(index)
+    outdir = Path(outdir) if outdir else Path(tempfile.mkdtemp(prefix="vaudtax_"))
+    outdir.mkdir(parents=True, exist_ok=True)
+    paths = []
+    with zipfile.ZipFile(vaudtax_path) as z:
+        for key in keys:
+            target = outdir / f"{key}_{index.get(key, key)}"
+            with z.open(key) as src:
+                target.write_bytes(src.read())
+            paths.append(target.resolve())
+    return paths
 
 
 def summarize(root):
@@ -480,7 +481,7 @@ def summarize(root):
     #
     # Documents have no explicit taxpayer field in the XML. For single filers all
     # documents are CTB1. For joint filers, taxpayer is None here and must be
-    # determined from document content using identify_taxpayer() in pdf_utils.py.
+    # determined from document content (NAVS13, birthdate, or name).
     has_ctb2 = root.find(ns("taxpayerPersonalData2")) is not None
     docs = []
     for doc in root.findall(f".//{ns('documents')}"):
@@ -639,9 +640,16 @@ def print_summary(data):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage : parse_vaudtax.py <fichier.vaudtax>")
-        sys.exit(1)
-    root, pdfs = open_vaudtax(sys.argv[1])
-    data = summarize(root)
-    print_summary(data)
+    ap = argparse.ArgumentParser(description="Analyse un fichier .vaudtax")
+    ap.add_argument("file", help="fichier .vaudtax")
+    ap.add_argument("--extract", nargs="+", metavar="KEY",
+                    help="extrait les pièces jointes par clé ZIP ('all' pour toutes) "
+                         "et affiche un chemin par ligne au lieu du résumé")
+    ap.add_argument("--outdir", help="répertoire de sortie (défaut : répertoire temporaire)")
+    args = ap.parse_args()
+    if args.extract:
+        for p in extract_attachments(args.file, args.extract, args.outdir):
+            print(p)
+    else:
+        root, pdfs = open_vaudtax(args.file)
+        print_summary(summarize(root))
