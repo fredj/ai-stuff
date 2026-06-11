@@ -1,11 +1,11 @@
 ---
 name: openlayers-navigation
-description: OpenLayers map navigation — pan and zoom. Use when panning (dragging) the map, zooming in/out via scroll wheel or zoom controls, or setting the map view programmatically.
+description: OpenLayers map navigation — pan, zoom, and rotate. Use when panning (dragging) the map, zooming in/out via scroll wheel or zoom controls, or rotating the map view.
 ---
 
 # OpenLayers Navigation Skill
 
-This skill covers programmatic pan and zoom for OpenLayers maps via Chrome DevTools.
+This skill covers programmatic pan, zoom, and rotation for OpenLayers maps via Chrome DevTools.
 
 ## Pan (Drag the Map)
 
@@ -112,6 +112,80 @@ async function clickZoomOut() {
 }
 ```
 
+## Rotate (Alt+Shift+Drag)
+
+OpenLayers' `DragRotate` interaction fires on pointer drag with Alt+Shift held. The rotation is derived from the angle of the pointer relative to the map centre: moving the pointer clockwise around the centre rotates the map clockwise.
+
+```javascript
+async function rotateMap(angleDeg) {
+  // angleDeg > 0: clockwise (north tilts right); < 0: counterclockwise
+  const canvas = document.querySelector('.ol-viewport canvas');
+  const rect = canvas.getBoundingClientRect();
+
+  const centerX = rect.left + rect.width / 2;
+  const centerY = rect.top + rect.height / 2;
+  const radius = Math.min(rect.width, rect.height) * 0.3;
+
+  const angleRad = angleDeg * Math.PI / 180;
+
+  // Drag from theta=0 to theta=-angleRad around map centre.
+  // OL computes theta = atan2(halfH - y, x - halfW) and applies -delta to rotation,
+  // so a decrease of angleRad in theta adds +angleRad to the view rotation.
+  const startTheta = 0;
+  const endTheta = -angleRad;
+
+  const base = {
+    view: window, bubbles: true, cancelable: true,
+    button: 0, buttons: 1,
+    pointerId: 1, pointerType: 'mouse', isPrimary: true,
+    altKey: true, shiftKey: true
+  };
+
+  const startX = centerX + radius * Math.cos(startTheta);
+  const startY = centerY - radius * Math.sin(startTheta);
+
+  canvas.dispatchEvent(new PointerEvent('pointermove', { ...base, clientX: startX, clientY: startY, buttons: 0 }));
+  canvas.dispatchEvent(new PointerEvent('pointerdown', { ...base, clientX: startX, clientY: startY }));
+  await new Promise(r => setTimeout(r, 25));
+
+  const steps = 8;
+  for (let i = 1; i <= steps; i++) {
+    const t = i / steps;
+    const theta = startTheta + (endTheta - startTheta) * t;
+    const cx = centerX + radius * Math.cos(theta);
+    const cy = centerY - radius * Math.sin(theta);
+    canvas.dispatchEvent(new PointerEvent('pointermove', { ...base, clientX: cx, clientY: cy }));
+    await new Promise(r => setTimeout(r, 25));
+  }
+
+  const endX = centerX + radius * Math.cos(endTheta);
+  const endY = centerY - radius * Math.sin(endTheta);
+  canvas.dispatchEvent(new PointerEvent('pointerup', { ...base, clientX: endX, clientY: endY, buttons: 0 }));
+  await new Promise(r => setTimeout(r, 300));
+}
+
+// Rotate 45° clockwise
+await rotateMap(45);
+
+// Rotate 90° counterclockwise
+await rotateMap(-90);
+```
+
+---
+
+## Reset to North (Rotate Control)
+
+If the map has the default Rotate control (`.ol-rotate`), clicking its button resets rotation to 0 with a short animation. The button has `ol-hidden` when rotation is 0, but clicking it still works.
+
+```javascript
+async function clickResetNorth() {
+  document.querySelector('.ol-rotate button').click();
+  await new Promise(r => setTimeout(r, 300));
+}
+```
+
+---
+
 ## Coordinate Utilities
 
 ```javascript
@@ -134,3 +208,5 @@ const absY = rect.top  + rect.height * relY;
 | **Map snaps back after pan** | Increase the number of intermediate `pointermove` steps or the delay between them. |
 | **Animation not complete before screenshot** | Wait ≥400 ms after a zoom or pan event. |
 | **Canvas not found** | Try `document.querySelector('.ol-viewport canvas')` or `document.querySelector('canvas')`. |
+| **Rotation does nothing** | Check that `DragRotate` interaction is active (it is by default). Ensure `altKey: true` and `shiftKey: true` on all events, and `pointerType: 'mouse'`. |
+| **Reset north button missing** | The `.ol-rotate button` is hidden (`ol-hidden`) when rotation is 0. Click it anyway or add the Rotate control to the map first. |
