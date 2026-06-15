@@ -329,6 +329,9 @@ def main():
     result = compute(data)
 
     result["periode"] = data.get("fiscal_year", "?")
+    # commune lives under identification; marital_status under taxpayer.
+    result["commune"] = (data.get("identification") or {}).get("commune")
+    result["marital_status"] = (data.get("taxpayer") or {}).get("marital_status")
 
     if args.json:
         print(json.dumps(result, ensure_ascii=False, indent=2))
