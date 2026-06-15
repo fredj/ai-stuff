@@ -7,6 +7,7 @@ math of its own. Network: only the calls calculate_taxes.py makes to vd.ch.
 import argparse
 import json
 import subprocess
+import sys
 from pathlib import Path
 
 
@@ -149,7 +150,7 @@ def format_report(results: dict, periode: str) -> str:
     return "\n".join(lines)
 
 
-def run_calculate_taxes(a: dict, scripts: Path, marginal: bool = False) -> dict:
+def run_calculate_taxes(a: dict, scripts: Path) -> dict:
     cmd = ["python", str(scripts / "calculate_taxes.py"),
            "--periode", str(a["periode"]), "--commune", a["commune"],
            "--etat-civil", a.get("etat_civil", "single"),
@@ -160,12 +161,8 @@ def run_calculate_taxes(a: dict, scripts: Path, marginal: bool = False) -> dict:
                       ("--enfants-menage", "enfants_menage")):
         if a.get(key):
             cmd += [flag, str(a[key])]
-    if marginal:
-        cmd.append("--marginal-rate")
     proc = subprocess.run(cmd, capture_output=True, text=True, check=True)
     data = json.loads(proc.stdout)
-    if marginal:
-        return {"marginal_total": data["marginal_total"]}
     return {"total": parse_chf(data["total_icc_ifd"]),
             "total_icc": parse_chf(data["total_icc"]),
             "total_ifd": parse_chf(data["total_ifd"])}
@@ -208,7 +205,6 @@ def run_main(argv) -> tuple:
 
 
 def main():
-    import sys
     try:
         rc, out = run_main(sys.argv[1:])
     except FileNotFoundError as e:
