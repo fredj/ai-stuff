@@ -94,6 +94,31 @@ def parse_lever_spec(specs: list) -> list:
     return levers
 
 
+def _apply(args: dict, icc: int, ifd: int) -> dict:
+    a = dict(args)
+    a["revenu_icc"] = max(0, args["revenu_icc"] - icc)
+    a["revenu_ifd"] = max(0, args["revenu_ifd"] - ifd)
+    return a
+
+
+def run_scenarios(base_args: dict, levers: list, scripts: Path) -> dict:
+    baseline = run_calculate_taxes(base_args, scripts)
+    scenarios = []
+    for lev in levers:
+        r = run_calculate_taxes(_apply(base_args, lev["icc"], lev["ifd"]), scripts)
+        scenarios.append({**lev, "total": r["total"],
+                          "saved": round(baseline["total"] - r["total"], 2)})
+    combined = None
+    if levers:
+        icc = sum(l["icc"] for l in levers)
+        ifd = sum(l["ifd"] for l in levers)
+        c = run_calculate_taxes(_apply(base_args, icc, ifd), scripts)
+        combined = {"total": c["total"],
+                    "saved": round(baseline["total"] - c["total"], 2),
+                    "cost": sum(l["cost"] for l in levers)}
+    return {"baseline": baseline, "scenarios": scenarios, "combined": combined}
+
+
 def run_calculate_taxes(a: dict, scripts: Path, marginal: bool = False) -> dict:
     cmd = ["python", str(scripts / "calculate_taxes.py"),
            "--periode", str(a["periode"]), "--commune", a["commune"],
