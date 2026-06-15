@@ -4,6 +4,7 @@
 Delegates all tax math to the sibling `vaudtax` skill's scripts. Adds no tax
 math of its own. Network: only the calls calculate_taxes.py makes to vd.ch.
 """
+import argparse
 import json
 import subprocess
 from pathlib import Path
@@ -168,3 +169,54 @@ def run_calculate_taxes(a: dict, scripts: Path, marginal: bool = False) -> dict:
     return {"total": parse_chf(data["total_icc_ifd"]),
             "total_icc": parse_chf(data["total_icc"]),
             "total_ifd": parse_chf(data["total_ifd"])}
+
+
+def run_main(argv) -> tuple:
+    """Parse args, run analysis, return (exit_code, report_text). Testable core."""
+    ap = argparse.ArgumentParser(
+        description="Find and quantify tax-reduction levers in a .vaudtax file.")
+    ap.add_argument("file", help="Path to the .vaudtax file")
+    ap.add_argument("--commune", default=None,
+                    help="Override; defaults to the commune compute_code800 emits")
+    ap.add_argument("--etat-civil", default="single",
+                    choices=["single", "married", "parent"])
+    ap.add_argument("--enfants", type=int, default=0)
+    ap.add_argument("--enfants-demi", type=int, default=0)
+    ap.add_argument("--enfants-menage", type=int, default=0)
+    ap.add_argument("--lever", action="append", default=[],
+                    help="Explicit lever name:icc=N,ifd=N[,cost=N][,type=...]")
+    args = ap.parse_args(argv)
+
+    scripts = resolve_vaudtax_scripts()
+    compute = run_compute_code800(Path(args.file), scripts)
+    periode = compute.get("periode", "?")
+    commune = args.commune or compute.get("commune")
+    if not commune:
+        ap.error("No commune in the declaration; pass --commune explicitly.")
+    base_args = {
+        "periode": int(periode) if str(periode).isdigit() else periode,
+        "commune": commune, "etat_civil": args.etat_civil,
+        "enfants": args.enfants, "enfants_demi": args.enfants_demi,
+        "enfants_menage": args.enfants_menage,
+        "revenu_icc": compute["revenu_icc"], "fortune_icc": compute["fortune_icc"],
+        "revenu_ifd": compute["revenu_ifd"],
+    }
+    levers = detect_auto_levers(compute["breakdown"], CAPS_2025)
+    levers += parse_lever_spec(args.lever)
+    results = run_scenarios(base_args, levers, scripts)
+    return 0, format_report(results, periode=str(periode))
+
+
+def main():
+    import sys
+    try:
+        rc, out = run_main(sys.argv[1:])
+    except FileNotFoundError as e:
+        print(str(e), file=sys.stderr)
+        return 2
+    print(out)
+    return rc
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
