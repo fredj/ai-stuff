@@ -119,6 +119,35 @@ def run_scenarios(base_args: dict, levers: list, scripts: Path) -> dict:
     return {"baseline": baseline, "scenarios": scenarios, "combined": combined}
 
 
+def _chf(n) -> str:
+    return f"{round(n):,}".replace(",", "'")
+
+
+def format_report(results: dict, periode: str) -> str:
+    base = results["baseline"]["total"]
+    recoverable = [s for s in results["scenarios"] if s["type"] == "recoverable"]
+    forward = [s for s in results["scenarios"] if s["type"] == "forward"]
+    lines = [f"Tax optimization — {periode}",
+             f"Baseline total tax: CHF {_chf(base)}", ""]
+    if recoverable:
+        lines.append("Recoverable now (amend / refile — no new spending)")
+        for s in recoverable:
+            lines.append(f"  {s['label']:<30} saved CHF {_chf(s['saved'])}")
+        lines.append("")
+    if forward:
+        lines.append("Forward-looking (requires committing cash)")
+        for s in forward:
+            net = s["saved"] - s["cost"]
+            lines.append(f"  {s['label']:<30} cost CHF {_chf(s['cost'])}  "
+                         f"saved CHF {_chf(s['saved'])}  net CHF {_chf(net)}")
+        lines.append("")
+    if results.get("combined"):
+        c = results["combined"]
+        lines.append(f"Combined realistic scenario: saved CHF {_chf(c['saved'])} "
+                     f"(cash cost CHF {_chf(c['cost'])})")
+    return "\n".join(lines)
+
+
 def run_calculate_taxes(a: dict, scripts: Path, marginal: bool = False) -> dict:
     cmd = ["python", str(scripts / "calculate_taxes.py"),
            "--periode", str(a["periode"]), "--commune", a["commune"],
