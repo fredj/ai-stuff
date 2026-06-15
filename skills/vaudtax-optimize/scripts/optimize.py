@@ -41,6 +41,36 @@ def run_compute_code800(vaudtax_file: Path, scripts: Path) -> dict:
     return json.loads(proc.stdout)
 
 
+# Caps sourced from vaudtax/references/deductions.md (2025). Year-specific:
+# add a CAPS_<year> table and select on `periode` before reusing for other years.
+CAPS_2025 = {
+    "pilier3a_lpp": 7258,   # assured under LPP (code 310)
+}
+
+# Below this, a gap-to-cap is rounding noise, not an actionable lever. A real
+# declaration showed pilier3a=7250 vs cap 7258 (CHF 8) — do not surface that.
+MIN_GAP = 100
+
+
+def detect_auto_levers(breakdown: dict, caps: dict) -> list:
+    """Mechanical levers from the compute_code800 breakdown.
+
+    Mechanism 1 (gap-to-cap): pillar 3a headroom. The 3a contribution is
+    deductible identically on ICC and IFD. Other forfaits (transport, meals,
+    autres frais) are auto-maximised by compute_code800, so they carry no
+    headroom and are intentionally not surfaced here.
+    """
+    levers = []
+    gap_3a = caps["pilier3a_lpp"] - breakdown.get("pilier3a", 0)
+    if gap_3a >= MIN_GAP:
+        levers.append({
+            "name": "pilier3a", "type": "forward",
+            "label": "Pilier 3a — combler le plafond",
+            "icc": gap_3a, "ifd": gap_3a, "cost": gap_3a,
+        })
+    return levers
+
+
 def run_calculate_taxes(a: dict, scripts: Path, marginal: bool = False) -> dict:
     cmd = ["python", str(scripts / "calculate_taxes.py"),
            "--periode", str(a["periode"]), "--commune", a["commune"],
