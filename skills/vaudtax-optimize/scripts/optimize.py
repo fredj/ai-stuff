@@ -71,6 +71,29 @@ def detect_auto_levers(breakdown: dict, caps: dict) -> list:
     return levers
 
 
+def parse_lever_spec(specs: list) -> list:
+    """Parse `name:icc=N,ifd=N[,cost=N][,type=...]` strings into lever dicts."""
+    levers = []
+    for spec in specs:
+        if ":" not in spec:
+            raise ValueError(f"Malformed lever (need name:...): {spec!r}")
+        name, _, rest = spec.partition(":")
+        kv = {}
+        for pair in rest.split(","):
+            k, _, v = pair.partition("=")
+            kv[k.strip()] = v.strip()
+        if "icc" not in kv or "ifd" not in kv:
+            raise ValueError(f"Lever {name!r} needs icc= and ifd=")
+        typ = kv.get("type", "forward")
+        icc, ifd = int(kv["icc"]), int(kv["ifd"])
+        default_cost = icc if typ == "forward" else 0
+        levers.append({
+            "name": name.strip(), "type": typ, "label": name.strip(),
+            "icc": icc, "ifd": ifd, "cost": int(kv.get("cost", default_cost)),
+        })
+    return levers
+
+
 def run_calculate_taxes(a: dict, scripts: Path, marginal: bool = False) -> dict:
     cmd = ["python", str(scripts / "calculate_taxes.py"),
            "--periode", str(a["periode"]), "--commune", a["commune"],
