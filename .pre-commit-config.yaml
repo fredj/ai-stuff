@@ -1,0 +1,7 @@
+repos:
+  - repo: https://github.com/agent-ecosystem/skill-validator
+    rev: v1.5.6
+    hooks:
+      - id: skill-validator
+        args: ['check', 'skills/']
+        files: "^skills/"

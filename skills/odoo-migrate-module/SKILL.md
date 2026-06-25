@@ -83,7 +83,7 @@ For each module in `depends`, check `renamed_modules` and `merged_modules` and *
 "pos_epson_printer" → "point_of_sale"  (remove if "point_of_sale" is already listed)
 ```
 
-Also scan `renamed_models` and `merged_models` for any model names your module inherits or uses — note these for Step 3. See [apriori.md](apriori.md) for a deeper explanation of how `apriori.py` relates to custom module migrations.
+Also scan `renamed_models` and `merged_models` for any model names your module inherits or uses — note these for Step 3. See [apriori.md](references/apriori.md) for a deeper explanation of how `apriori.py` relates to custom module migrations.
 
 ---
 
@@ -408,4 +408,4 @@ After all changes, output a clear summary:
 
 ## Additional resources
 
-**Understanding `apriori.py`**: See [apriori.md](apriori.md) for a detailed explanation of how `apriori.py` dictionaries work and how they relate to custom module migrations.
+**Understanding `apriori.py`**: See [apriori.md](references/apriori.md) for a detailed explanation of how `apriori.py` dictionaries work and how they relate to custom module migrations.

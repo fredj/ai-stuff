@@ -25,7 +25,7 @@ All scripts live in the `scripts/` subdirectory of this skill and use only Pytho
 | `compute_code800.py <file.vaudtax>` | Estimate revenu imposable ICC (code 800), IFD, and fortune — outputs values ready to pass to `calculate_taxes.py` |
 | `calculate_taxes.py --periode YEAR --commune NAME --revenu-icc N --fortune-icc N --revenu-ifd N` | Query the official Canton Vaud tax calculator via HTTP POST and return authoritative results |
 
-The JSON output conforms to **`vaudtax-export.schema.json`** (JSON Schema 2020-12; file is in the skill root).
+The JSON output conforms to **[vaudtax-export.schema.json](references/vaudtax-export.schema.json)** (JSON Schema 2020-12).
 
 `<skill-dir>` below is this skill's base directory, announced when the skill is loaded — use it directly:
 
