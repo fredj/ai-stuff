@@ -13,7 +13,9 @@ Each section is keyed by its declaration **CODE**. The code is the stable citati
 - [Double activité des conjoints — CODE 235](#double-activité-des-conjoints--code-235)
 - [Assurances — CODE 300](#assurances--code-300)
 - [Pilier 3a — CODE 310](#pilier-3a--code-310)
+- [Autres cotisations contractuelles — CODE 340](#autres-cotisations-contractuelles--code-340)
 - [Intérêts capitaux d'épargne — CODE 480](#intérêts-capitaux-dépargne--code-480)
+- [Frais d'administration de titres — CODE 490](#frais-dadministration-de-titres--code-490)
 - [Intérêts passifs / dettes privées — CODE 610](#intérêts-passifs--dettes-privées--code-610)
 - [Frais de formation et perfectionnement — CODE 618](#frais-de-formation-et-perfectionnement--code-618)
 - [Déduction logement — CODE 660](#déduction-logement--code-660)
@@ -100,6 +102,28 @@ Deduction = **min(net premiums after subsidies, family-status cap)**. The cap is
 
 ---
 
+## Autres cotisations contractuelles — CODE 340
+
+Loss-of-earnings insurance premiums withheld contractually on the salary.
+
+> Les personnes salariées peuvent indiquer sous cette rubrique également, le cas échéant, les primes et cotisations retenues contractuellement sur le salaire au titre de l'assurance-maladie prévoyant uniquement des prestations remplaçant le produit du travail (perte de gain).
+
+Only *perte de gain* cover qualifies — an ordinary health-insurance premium belongs under code 300, and AVS/AI/APG/AC contributions are already deducted at code 100.
+
+**ICC:** specific deduction, **no cap**. It is deducted in full and separately from the code 300 cap.
+
+**IFD:** **not deductible separately** — folded into the combined code 300/340/480 line and subject to that line's cap (CHF 1'800 single / CHF 3'700 married / + CHF 700 per child).
+
+> Les autres cotisations contractuelles des salariés et les intérêts de capitaux d'épargne dont la déduction spécifique est autorisée pour l'impôt cantonal et communal ne sont pas déductibles distinctement à l'impôt fédéral direct mais inclus dans la déduction maximale ci-dessous.
+
+The IFD income-determination table confirms this: codes **300/340/480** share a single row, "Primes et cotisations d'assurances et intérêts de capitaux d'épargne".
+
+**Practical consequence:** whenever net premiums (code 300) already reach the IFD cap, code 340 changes ICC but has **zero** IFD effect. It only moves the federal figure for taxpayers below the cap.
+
+**Source field:** `autreCotiContractuelle`, alongside `cotisationOrdinaire` in each `activiteSalarieeRevenus` entry.
+
+---
+
 ## Intérêts capitaux d'épargne — CODE 480
 
 **ICC:** Savings interest income from private wealth (savings accounts, postal accounts, Swiss/foreign bonds, mortgages, etc.) is deductible up to:
@@ -115,6 +139,38 @@ Deduction = **min(net premiums after subsidies, family-status cap)**. The cap is
 **IFD:** Codes 300, 340 and 480 are reported as a **single combined deduction line** ("Primes et cotisations d'assurances et intérêts de capitaux d'épargne", codes 300/340/480 grouped in the IFD income-determination table). That combined line is subject to the code 300 IFD caps above (CHF 1'800 single / CHF 3'700 married / + CHF 700 per child). Code 480 is not a separate IFD line item.
 
 **Will-be-zero check:** if the taxpayer has no savings interest declared under code 410, deduction = CHF 0.
+
+---
+
+## Frais d'administration de titres — CODE 490
+
+**ICC and IFD** — a separate deduction line in both (the IFD income-determination table lists code 490 on its own row, unlike codes 340 and 480).
+
+**Forfait:** **1.5 ‰ of the code 410 value**, admitted without justification.
+
+> Par mesure de simplification, l'autorité fiscale admet, en règle générale, sans justification, une déduction forfaitaire correspondant à 1,5 ‰ de la valeur des titres et autres placements de capitaux privés déclarés sous code 410, dont la gestion est confiée à des tiers.
+
+**The base is code 410 — which includes bank accounts.** The official instructions split code 410 into two rubrics, both in the base:
+
+1. Comptes et livrets bancaires/postaux, comptes-métal, crypto-monnaies, garantie de loyer, leasing
+2. Actions, obligations, fonds de placement, relevé fiscal bancaire, créances
+
+Numéraire (**code 420**) and non-financial assets are **not** part of the base.
+
+| XML source | Parser `type` | In the 490 base? |
+|---|---|---|
+| `etatTitres` | `compte` | yes |
+| `relevesFiscauxBancaires` | `portefeuille` | yes |
+| `numerairesList` | `numeraire` | no — code 420 |
+| `objetsMobiliers` | `objet_mobilier` | no |
+
+> Computing the forfait on the portfolio alone understates the deduction. On a declaration mixing a broker account with several bank accounts, the omitted balances can move the deduction by tens of francs, and the resulting code 700 will not match the bordereau.
+
+The text restricts the forfait to assets *« dont la gestion est confiée à des tiers »*; in practice the ACI applies it to the full code 410 value.
+
+**Actual costs** (deductible instead of the forfait, if higher and justified): frais de garde et d'administration ordinaire, frais de dépôt, frais d'encaissement, frais d'affidavit.
+
+**Not deductible:** buy/sell commissions and transaction fees, investment- or tax-advisory fees, honoraires de gestion, the taxpayer's own labour, and the cost of preparing the tax return.
 
 ---
 
@@ -228,3 +284,5 @@ When verifying deductions, cross-check supporting documents **and** apply deduct
 13. **Frais de formation (618)** → verify ≤ ICC CHF 12'000 / IFD CHF 13'000 per person; exclude formation initiale and employer-paid costs
 14. **Dons (720)** → verify total ≥ CHF 100 and ≤ 20% of code 700; exclude churches and membership dues
 15. **Portfolio / titres** → cross-check fiscal value, gross dividends, withholding tax (IES) against broker statement
+16. **Autres cotisations (340)** → ICC deducted in full and uncapped; for IFD verify it is inside the 300/340/480 cap, not a separate line
+17. **Frais d'administration (490)** → forfait = 1.5 ‰ × full code 410 value (portfolios **and** bank accounts); exclude numéraire (code 420)
