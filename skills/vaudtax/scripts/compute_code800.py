@@ -79,7 +79,7 @@ _ICC_LOGEMENT_PLAFOND_SINGLE  = 11100  # max rent for housing deduction, single
 _ICC_LOGEMENT_PLAFOND_MARRIED = 13700  # max rent for housing deduction, married
 _ICC_LOGEMENT_PLAFOND_PER_CHILD = 3700 # additional plafond per dependant child
 _ICC_LOGEMENT_MAX_DEDUCTION   = 6800   # absolute max deduction regardless of family
-_ADMIN_TITRES_PERMILLE = 1.5    # 1.5‰ of portfolio fiscal value (code 490)
+_ADMIN_TITRES_PERMILLE = 1.5    # 1.5‰ of securities + bank account value (code 490)
 
 
 def _transport_icc_forfait(km: int) -> int:
@@ -171,12 +171,22 @@ def compute(data: dict) -> dict:
     if not autres_frais:
         autres_frais = max(2000, min(4000, round(salary * 0.03)))
 
+    # ── Code 340 — autres cotisations contractuelles des salariés ─────────
+    # Primes d'assurance perte de gain retenues contractuellement sur le
+    # salaire. Deduction is specific and uncapped for ICC; for IFD it is not
+    # deductible separately but folded into the code 300/340/480 cap below.
+    autres_cotisations = sum(
+        int(e["other_contractual_contribution_chf"])
+        for e in data.get("income", [])
+        if e.get("other_contractual_contribution_chf")
+    )
+
     # ── Code 300 — assurances ─────────────────────────────────────────────
     ins = data.get("insurance_premiums") or {}
     ins_net = int(ins.get("gross_premiums_chf") or 0) - int(ins.get("subsidies_chf") or 0)
     assurances_icc = min(ins_net, _ICC_INS_MARRIED if is_married else _ICC_INS_SINGLE)
-    # IFD: assurances + savings interest share a single cap
-    assurances_ifd = min(ins_net + savings_interest,
+    # IFD: assurances + autres cotisations + savings interest share one cap
+    assurances_ifd = min(ins_net + autres_cotisations + savings_interest,
                          _IFD_INS_MARRIED if is_married else _IFD_INS_SINGLE)
 
     # ── Code 310 — pilier 3a ──────────────────────────────────────────────
@@ -194,17 +204,24 @@ def compute(data: dict) -> dict:
                        + int(dettes.get("ctb2_amount_chf") or 0))
 
     # ── Code 490 — frais administration titres ────────────────────────────
-    portfolio_value = sum(
+    # Base is the code 410 aggregate: portfolios plus bank accounts. Numéraire
+    # (code 420) and non-financial assets are excluded.
+    securities_value = sum(
         float(a.get("valeur_fiscale_chf") or 0)
         for a in data.get("assets", [])
         if a.get("type") == "portefeuille"
+    ) + sum(
+        float(a.get("balance_chf") or 0)
+        for a in data.get("assets", [])
+        if a.get("type") == "compte"
     )
-    admin_titres = round(portfolio_value * _ADMIN_TITRES_PERMILLE / 1000)
+    admin_titres = round(securities_value * _ADMIN_TITRES_PERMILLE / 1000)
 
     # ── Code 700 (before logement and medical) ────────────────────────────
     code_700_pre = round(gross_income
                          - transport_icc - meals - autres_frais
-                         - assurances_icc - pilier3a - interets_epargne - admin_titres
+                         - assurances_icc - pilier3a - autres_cotisations
+                         - interets_epargne - admin_titres
                          - interets_dettes)
 
     # ── Code 660 — déduction logement (ICC only) ──────────────────────────
@@ -265,6 +282,7 @@ def compute(data: dict) -> dict:
             "assurances_icc":   assurances_icc,
             "assurances_ifd":   round(assurances_ifd),
             "pilier3a":         pilier3a,
+            "autres_cotisations": autres_cotisations,
             "interets_epargne": round(interets_epargne),
             "interets_dettes":  interets_dettes,
             "admin_titres":     admin_titres,
@@ -292,6 +310,7 @@ def _print_results(result: dict) -> None:
     print(f"  Autres frais prof. (code 160)  CHF {b['autres_frais']:>10,}")
     print(f"  Assurances (code 300)          CHF {b['assurances_icc']:>10,}")
     print(f"  Pilier 3a (code 310)           CHF {b['pilier3a']:>10,}")
+    print(f"  Autres cotis. (code 340)       CHF {b['autres_cotisations']:>10,}")
     print(f"  Intérêts épargne (code 480)    CHF {b['interets_epargne']:>10,}")
     print(f"  Admin. titres (code 490)       CHF {b['admin_titres']:>10,}")
     print(f"  Intérêts dettes (code 520)     CHF {b['interets_dettes']:>10,}")
