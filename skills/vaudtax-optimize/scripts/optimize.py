@@ -83,6 +83,11 @@ def detect_auto_levers(breakdown: dict, caps: dict, periode: int, current_year: 
     surfaced as a signal, not a scenario — never invent a saving for it.
 
     Returns (levers, signals).
+
+    LIMITATION: this only sees the single .vaudtax file passed in, so it
+    only ever detects one year's gap. Someone with shortfalls in several
+    past years (each independently buyable within its own 10-year window)
+    needs one run per year's file — gaps are never aggregated across years.
     """
     levers, signals = [], []
     gap_3a = caps["pilier3a_lpp"] - breakdown.get("pilier3a", 0)
