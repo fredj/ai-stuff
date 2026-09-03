@@ -32,7 +32,7 @@ A lever is a **real saving only when both** (a) the rule holds (cited in `deduct
 
 | CODE | Lever | `--lever` name | Type | Cap (2025) | ICC vs IFD | Detection |
 |---|---|---|---|---|---|---|
-| [310](../../vaudtax/references/deductions.md#pilier-3a--code-310) | Pilier 3a | `3a` | forward | CHF 7'258 (with LPP) | equal | **auto-detected** (gap to 7258) |
+| [310](../../vaudtax/references/deductions.md#pilier-3a--code-310) | Pilier 3a | `3a` | forward | CHF 7'258 (with LPP) | equal | **auto-detected** (gap to 7258; surfaced as a `lacune_3a` signal instead if the declaration year is already closed — see below) |
 | [320](../../vaudtax/references/deductions.md#pilier-3a--code-310) | Rachat LPP / 2e pilier buy-back | `rachat` | forward | per LPP certificate | equal | explicit |
 | [670](../../vaudtax/references/deductions.md#frais-de-garde--code-670) | Frais de garde / childcare | `garde` | recoverable | ICC 15'200 / IFD 25'800 per child | **differ** | explicit |
 | [618](../../vaudtax/references/deductions.md#frais-de-formation-et-perfectionnement--code-618) | Frais de formation | `formation` | recoverable | ICC 12'000 / IFD 13'000 per person | **differ** | explicit |
@@ -46,6 +46,8 @@ A lever is a **real saving only when both** (a) the rule holds (cited in `deduct
 ### CODE 310 — Pilier 3a (forward, auto-detected)
 
 Cap CHF 7'258 for taxpayers affiliated to the 2e pilier (LPP); ICC = IFD. `optimize.py` computes the headroom as `7258 − declared` on its own — **do not pass a `--lever` for it.** (Non-LPP-affiliated taxpayers have a higher cap; see the CODE 310 table in `deductions.md` — that case is not auto-detected.)
+
+**If the declaration's `fiscalPeriod` is already closed** (a past year), this gap is **not** a same-year top-up any more — `optimize.py` surfaces it as a `"lacune_3a"` signal instead of a scenario. The real lever is a **rachat de lacune 3a** (see `deductions.md` CODE 310) claimed on a later, still-open year: same CHF amount (the prior year's actual shortfall), but computed against *that* year's income and rate — never the closed year's baseline. Conditions to confirm with the user before quoting a saving: the 10-year window, the buy-back year's ordinary contribution paid in full first, and the provider actually offering the feature (from 2026). Once confirmed, compute it as an explicit forward `--lever` on the buy-back year's own declaration/simulation, not on this one.
 
 ### CODE 320 — Rachat LPP / 2e pilier buy-back (forward)
 

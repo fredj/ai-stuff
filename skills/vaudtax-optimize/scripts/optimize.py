@@ -5,6 +5,7 @@ Delegates all tax math to the sibling `vaudtax` skill's scripts. Adds no tax
 math of its own. Network: only the calls calculate_taxes.py makes to vd.ch.
 """
 import argparse
+import datetime
 import json
 import subprocess
 import sys
@@ -65,23 +66,45 @@ CAPS_2025 = {
 MIN_GAP = 100
 
 
-def detect_auto_levers(breakdown: dict, caps: dict) -> list:
+def detect_auto_levers(breakdown: dict, caps: dict, periode: int, current_year: int) -> tuple:
     """Mechanical levers from the compute_code800 breakdown.
 
     Mechanism 1 (gap-to-cap): pillar 3a headroom. The 3a contribution is
     deductible identically on ICC and IFD. Other forfaits (transport, meals,
     autres frais) are auto-maximised by compute_code800, so they carry no
     headroom and are intentionally not surfaced here.
+
+    A gap on a still-open declaration year is a same-year top-up: a real
+    scenario, computed against this year's baseline. A gap on an already
+    closed year cannot be topped up any more — it can only be recovered via
+    a "rachat de lacune 3a" claimed on a LATER year's declaration, at that
+    year's own income and rate (see deductions.md CODE 310). optimize.py has
+    no later year's baseline to compute against here, so that case is
+    surfaced as a signal, not a scenario — never invent a saving for it.
+
+    Returns (levers, signals).
     """
-    levers = []
+    levers, signals = [], []
     gap_3a = caps["pilier3a_lpp"] - breakdown.get("pilier3a", 0)
     if gap_3a >= MIN_GAP:
-        levers.append({
-            "name": "pilier3a", "type": "forward",
-            "label": "Pilier 3a — combler le plafond",
-            "icc": gap_3a, "ifd": gap_3a, "cost": gap_3a,
-        })
-    return levers
+        if not isinstance(periode, int) or periode >= current_year:
+            levers.append({
+                "name": "pilier3a", "type": "forward",
+                "label": "Pilier 3a — combler le plafond",
+                "icc": gap_3a, "ifd": gap_3a, "cost": gap_3a,
+            })
+        else:
+            signals.append({
+                "code": "310", "label": "Lacune 3a — rachat possible",
+                "note": f"CHF {_chf(gap_3a)} unused 3a headroom in {periode} "
+                        "(declaration year is closed). Not a same-year top-up "
+                        "any more — check with the 3a provider whether they "
+                        "offer the rachat-de-lacune catch-up (from 2026, "
+                        "10-year window, ordinary contribution of the buy-back "
+                        "year must be paid in full first), then quote the "
+                        "saving on that later year's own declaration.",
+            })
+    return levers, signals
 
 
 def detect_insurance_gap_signal(breakdown: dict) -> list:
@@ -272,11 +295,14 @@ def run_main(argv) -> tuple:
         "revenu_icc": compute["revenu_icc"], "fortune_icc": compute["fortune_icc"],
         "revenu_ifd": compute["revenu_ifd"],
     }
-    levers = detect_auto_levers(compute["breakdown"], CAPS_2025)
-    levers += parse_lever_spec(args.lever)
+    current_year = datetime.date.today().year
+    auto_levers, lacune_signals = detect_auto_levers(
+        compute["breakdown"], CAPS_2025, base_args["periode"], current_year)
+    levers = auto_levers + parse_lever_spec(args.lever)
     results = run_scenarios(base_args, levers, scripts)
     exported = run_export_json(Path(args.file), scripts)
-    signals = detect_candidate_signals(exported) + detect_insurance_gap_signal(compute["breakdown"])
+    signals = (lacune_signals + detect_candidate_signals(exported)
+               + detect_insurance_gap_signal(compute["breakdown"]))
     return 0, format_report(results, periode=str(periode), signals=signals)
 
 

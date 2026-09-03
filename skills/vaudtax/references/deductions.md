@@ -186,6 +186,8 @@ The text restricts the forfait to assets *« dont la gestion est confiée à des
 
 Cross-check: sum of all form 21 EDP attestations per taxpayer must equal `formesReconnuesPrevoyanceIndividuelleContribuable1/2` and must not exceed the applicable maximum. Missing attestations = unjustified declaration.
 
+**Rachat de lacune (catch-up buy-back), from 2026:** federal pillar-3a reform allows buying back a contribution gap from a **prior year, starting with gap-year 2025**, within a **10-year window**, subject to (a) the ordinary contribution for the buy-back year itself being paid **in full first**, and (b) the 3a provider actually offering the feature (rolling out from January 2026 — confirm with the provider, do not assume). Unlike the ordinary CODE 310 cap, this is **not** something a declaration for the gap year itself can show as unclaimed — it is claimed on a **later year's** declaration, at that later year's tax base and rate. Never invent the buy-back amount: it equals the prior year's actual shortfall to the cap that applied in that year.
+
 ---
 
 ## Frais d'entretien d'immeuble — CODE 540
