@@ -8,6 +8,7 @@ import argparse
 import json
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 
@@ -43,6 +44,16 @@ def run_compute_code800(vaudtax_file: Path, scripts: Path) -> dict:
     return json.loads(proc.stdout)
 
 
+def run_export_json(vaudtax_file: Path, scripts: Path) -> dict:
+    """Run export_json.py (writes to a file, no stdout mode) via a temp file."""
+    with tempfile.TemporaryDirectory() as tmp:
+        out_path = Path(tmp) / "export.json"
+        subprocess.run(
+            ["python", str(scripts / "export_json.py"), str(vaudtax_file), str(out_path)],
+            capture_output=True, text=True, check=True)
+        return json.loads(out_path.read_text())
+
+
 # Caps sourced from vaudtax/references/deductions.md (2025). Year-specific:
 # add a CAPS_<year> table and select on `periode` before reusing for other years.
 CAPS_2025 = {
@@ -71,6 +82,41 @@ def detect_auto_levers(breakdown: dict, caps: dict) -> list:
             "icc": gap_3a, "ifd": gap_3a, "cost": gap_3a,
         })
     return levers
+
+
+def detect_candidate_signals(data: dict) -> list:
+    """Mechanism 3 aid: structured evidence for entitlement levers `optimize.py`
+    cannot compute a CHF amount for. These are questions, not findings — never
+    passed as `--lever` automatically. See references/levers.md.
+    """
+    signals = []
+
+    ctb1_income = any(e.get("taxpayer") == "CTB1" for e in data.get("income", []))
+    ctb2_income = any(e.get("taxpayer") == "CTB2" for e in data.get("income", []))
+    if data.get("taxpayer2") and ctb1_income and ctb2_income:
+        signals.append({
+            "code": "235", "label": "Double activité des conjoints",
+            "note": "Both spouses have lucrative income — check eligibility "
+                    "(see deductions.md CODE 235) and pass --lever if it applies.",
+        })
+
+    if data.get("education_costs"):
+        signals.append({
+            "code": "618", "label": "Frais de formation",
+            "note": "Training costs declared — confirm they aren't formation "
+                    "initiale and are within the CHF 12'000/13'000 cap.",
+        })
+
+    dettes = data.get("debt_interest") or {}
+    has_debt_interest = dettes.get("ctb1_amount_chf") or dettes.get("ctb2_amount_chf")
+    if data.get("real_estate") and not has_debt_interest:
+        signals.append({
+            "code": "610", "label": "Intérêts passifs / dettes privées",
+            "note": "Real estate declared but no debt interest — check for an "
+                    "unclaimed mortgage interest deduction.",
+        })
+
+    return signals
 
 
 def parse_lever_spec(specs: list) -> list:
@@ -125,7 +171,8 @@ def _chf(n) -> str:
     return f"{round(n):,}".replace(",", "'")
 
 
-def format_report(results: dict, periode: str) -> str:
+def format_report(results: dict, periode: str, signals: "list | None" = None) -> str:
+    signals = signals or []
     base = results["baseline"]["total"]
     recoverable = [s for s in results["scenarios"] if s["type"] == "recoverable"]
     forward = [s for s in results["scenarios"] if s["type"] == "forward"]
@@ -147,6 +194,11 @@ def format_report(results: dict, periode: str) -> str:
         c = results["combined"]
         lines.append(f"Combined realistic scenario: saved CHF {_chf(c['saved'])} "
                      f"(cash cost CHF {_chf(c['cost'])})")
+        lines.append("")
+    if signals:
+        lines.append("Signals found — confirm eligibility (not findings)")
+        for sig in signals:
+            lines.append(f"  CODE {sig['code']} — {sig['label']}: {sig['note']}")
     return "\n".join(lines)
 
 
@@ -201,7 +253,9 @@ def run_main(argv) -> tuple:
     levers = detect_auto_levers(compute["breakdown"], CAPS_2025)
     levers += parse_lever_spec(args.lever)
     results = run_scenarios(base_args, levers, scripts)
-    return 0, format_report(results, periode=str(periode))
+    exported = run_export_json(Path(args.file), scripts)
+    signals = detect_candidate_signals(exported)
+    return 0, format_report(results, periode=str(periode), signals=signals)
 
 
 def main():

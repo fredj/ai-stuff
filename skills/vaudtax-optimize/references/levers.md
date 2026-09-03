@@ -10,7 +10,9 @@ A saving can only come from one of three places:
 
 1. **Gap-to-cap, auto-detected.** A contribution with explicit headroom to a hard cap. Only **pilier 3a (CODE 310)** is auto-detected by `optimize.py` — it computes `7258 − declared` itself. No `--lever` needed.
 2. **Forfait under-claim.** A formula-based deduction left below its mechanical maximum. There are none to exploit here: transport (140), repas (150) and autres frais (160) are already auto-maximised by `compute_code800` — see below. Do not offer them as levers.
-3. **Entitlement levers, passed explicitly.** Deductions the taxpayer is entitled to but that require an eligibility judgment and/or supporting evidence (childcare, formation, dons, debt interest, double-activité, LPP buy-back). `optimize.py` cannot detect these from the declaration alone, so they are passed with `--lever "name:icc=N,ifd=N[,cost=N][,type=...]"`.
+3. **Entitlement levers, passed explicitly.** Deductions the taxpayer is entitled to but that require an eligibility judgment and/or supporting evidence (childcare, formation, dons, debt interest, double-activité, LPP buy-back). `optimize.py` cannot compute a CHF amount for these from the declaration alone, so they are passed with `--lever "name:icc=N,ifd=N[,cost=N][,type=...]"`.
+
+For three of these codes, `optimize.py` auto-detects the *evidence* (not the amount) and prints it as a "Signals found" line, so the agent doesn't have to already know to look: code 235 (both spouses have declared income), code 618 (training costs already present in the XML), and code 610 (real estate declared with no debt interest at all). These are still questions, not findings — confirm eligibility before turning one into a `--lever`.
 
 A lever is a **real saving only when both** (a) the rule holds (cited in `deductions.md`) **and** (b) the taxpayer's eligibility is evidenced in the declaration. If either is unconfirmed, it is a **question for the user, not a finding** — surface it as such.
 
