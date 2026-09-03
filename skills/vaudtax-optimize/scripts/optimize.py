@@ -55,11 +55,37 @@ def run_export_json(vaudtax_file: Path, scripts: Path) -> dict:
         return json.loads(out_path.read_text())
 
 
-# Caps sourced from vaudtax/references/deductions.md (2025). Year-specific:
-# add a CAPS_<year> table and select on `periode` before reusing for other years.
-CAPS_2025 = {
-    "pilier3a_lpp": 7258,   # assured under LPP (code 310)
+# Pilier 3a cap for LPP-affiliated taxpayers (code 310), CHF, by fiscal year —
+# published annually by OFAS/BSV (art. 7 al. 1 let. a OPP 3). Only years that
+# have been verified against an official source are listed here: do not add a
+# year from memory or estimation — a wrong cap misprices a real rachat. A
+# fiscal year missing from this table is a hard error (see get_caps_for_year),
+# not a silent fallback to the nearest known year.
+CAPS_BY_YEAR = {
+    2019: {"pilier3a_lpp": 6826},
+    2020: {"pilier3a_lpp": 6826},
+    2021: {"pilier3a_lpp": 6883},
+    2022: {"pilier3a_lpp": 6883},
+    2023: {"pilier3a_lpp": 7056},
+    2024: {"pilier3a_lpp": 7056},
+    2025: {"pilier3a_lpp": 7258},
 }
+
+
+def get_caps_for_year(periode) -> dict:
+    """Look up the pilier 3a cap table for `periode`. Raises ValueError (with
+    a message naming the missing year) rather than guessing or reusing a
+    neighboring year's cap.
+    """
+    if not isinstance(periode, int):
+        raise ValueError(f"Cannot resolve pilier 3a cap: unknown fiscal period {periode!r}")
+    if periode not in CAPS_BY_YEAR:
+        raise ValueError(
+            f"No pilier 3a cap on file for fiscal year {periode}. Add it to "
+            "CAPS_BY_YEAR in optimize.py, sourced from an official OFAS/BSV "
+            "communiqué — never estimated.")
+    return CAPS_BY_YEAR[periode]
+
 
 # Below this, a gap-to-cap is rounding noise, not an actionable lever. A real
 # declaration showed pilier3a=7250 vs cap 7258 (CHF 8) — do not surface that.
@@ -84,15 +110,13 @@ def detect_auto_levers(breakdown: dict, caps: dict, periode: int, current_year: 
 
     Returns (levers, signals).
 
+    `caps` must already be the table for `periode` (see get_caps_for_year) —
+    this function does not look the year up itself.
+
     LIMITATION: this only sees the single .vaudtax file passed in, so it
     only ever detects one year's gap. Someone with shortfalls in several
     past years (each independently buyable within its own 10-year window)
     needs one run per year's file — gaps are never aggregated across years.
-    It also always compares against the caller's `caps` (currently the
-    single CAPS_2025 table, hardcoded at the call site) rather than the
-    cap that applied in `periode` — the 3a cap is indexed annually, so a
-    run against an older year's file understates or overstates the true
-    gap unless the caller passes that year's own cap.
     """
     levers, signals = [], []
     gap_3a = caps["pilier3a_lpp"] - breakdown.get("pilier3a", 0)
@@ -306,8 +330,12 @@ def run_main(argv) -> tuple:
         "revenu_ifd": compute["revenu_ifd"],
     }
     current_year = datetime.date.today().year
+    try:
+        caps = get_caps_for_year(base_args["periode"])
+    except ValueError as e:
+        ap.error(str(e))
     auto_levers, lacune_signals = detect_auto_levers(
-        compute["breakdown"], CAPS_2025, base_args["periode"], current_year)
+        compute["breakdown"], caps, base_args["periode"], current_year)
     levers = auto_levers + parse_lever_spec(args.lever)
     results = run_scenarios(base_args, levers, scripts)
     exported = run_export_json(Path(args.file), scripts)
