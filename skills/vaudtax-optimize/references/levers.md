@@ -14,6 +14,8 @@ A saving can only come from one of three places:
 
 For three of these codes, `optimize.py` auto-detects the *evidence* (not the amount) and prints it as a "Signals found" line, so the agent doesn't have to already know to look: code 235 (both spouses have declared income), code 618 (training costs already present in the XML), and code 610 (real estate declared with no debt interest at all). These are still questions, not findings — confirm eligibility before turning one into a `--lever`.
 
+`optimize.py` also auto-detects a **gap-to-cap** signal on code 300 (declared insurance premiums below the ICC cap) the same way it does for pilier 3a — but unlike 3a there's no "top up" action: the gap only becomes real money if the taxpayer already holds an undeclared, deductible premium (accident, life, health for a dependent). Always a question — see `references/questions.md`.
+
 A lever is a **real saving only when both** (a) the rule holds (cited in `deductions.md`) **and** (b) the taxpayer's eligibility is evidenced in the declaration. If either is unconfirmed, it is a **question for the user, not a finding** — surface it as such.
 
 ## Lever string syntax
@@ -35,8 +37,10 @@ A lever is a **real saving only when both** (a) the rule holds (cited in `deduct
 | [670](../../vaudtax/references/deductions.md#frais-de-garde--code-670) | Frais de garde / childcare | `garde` | recoverable | ICC 15'200 / IFD 25'800 per child | **differ** | explicit |
 | [618](../../vaudtax/references/deductions.md#frais-de-formation-et-perfectionnement--code-618) | Frais de formation | `formation` | recoverable | ICC 12'000 / IFD 13'000 per person | **differ** | explicit |
 | [720](../../vaudtax/references/deductions.md#dons--code-720) | Dons / donations | `dons` | recoverable | ICC 20% of code 700 / IFD 20% of revenu interm. I; min CHF 100/yr | bases differ | explicit |
+| [540](../../vaudtax/references/deductions.md#frais-dentretien-dimmeuble--code-540) | Frais d'entretien d'immeuble | `entretien` | recoverable | ICC 10–30% of valeur locative / revenu net immeuble, by age+use; IFD 10%/20% by 10-yr age | **differ** (different age thresholds) | explicit — not file-detectable, ask |
 | [610](../../vaudtax/references/deductions.md#intérêts-passifs--dettes-privées--code-610) | Intérêts passifs / debt interest | `interets` | recoverable | gross wealth yield + CHF 50'000 | equal ceiling | explicit |
 | [235](../../vaudtax/references/deductions.md#double-activité-des-conjoints--code-235) | Double activité des conjoints | `double` | recoverable | ICC 1'700 / IFD 50% of lower income ∈ [8'600, 14'100] | **differ** | explicit (married only) |
+| [300](../../vaudtax/references/deductions.md#assurances--code-300) | Assurances / undeclared premium | — | recoverable | ICC 5'000 (single) / 9'900 (married) | differ (combined line for IFD) | **auto-detected signal** (gap to ICC cap) |
 | 140 / 150 / 160 | Transport / repas / autres frais | — | — | — | — | **auto-maxed, not a lever** |
 
 ### CODE 310 — Pilier 3a (forward, auto-detected)
@@ -73,6 +77,14 @@ ICC capped at 20% of code 700; IFD capped at 20% of revenu intermédiaire I; tot
 
 ```
 --lever "dons:icc=2000,ifd=2000,type=recoverable"
+```
+
+### CODE 540 — Frais d'entretien d'immeuble (recoverable if eligible)
+
+Only applies to a **built** property (`batimentExiste = true`); an unbuilt land parcel has no maintenance deduction. `optimize.py` cannot detect this at all today — `parse_vaudtax.py`/`export_json.py` don't yet extract building age, `batimentExiste`, or declared maintenance costs (see `xml-sections.md`). Always ask; never auto-signal. Once eligibility, building age, and use (occupied/rented) are confirmed, compute the flat-rate or actual-cost amount per the ICC/IFD tables in `deductions.md`.
+
+```
+--lever "entretien:icc=6000,ifd=6000,type=recoverable"
 ```
 
 ### CODE 610 — Intérêts passifs / debt interest (recoverable if eligible)

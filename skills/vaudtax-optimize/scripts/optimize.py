@@ -84,6 +84,28 @@ def detect_auto_levers(breakdown: dict, caps: dict) -> list:
     return levers
 
 
+def detect_insurance_gap_signal(breakdown: dict) -> list:
+    """CODE 300: gap-to-cap on insurance premiums, computed the same way as
+    the pilier 3a gap — but unlike 3a there is no "top up" action; the
+    taxpayer must already hold an undeclared, deductible premium (accident,
+    life, health for a dependent, ...). Always a question, never a lever.
+    """
+    signals = []
+    cap = breakdown.get("assurances_icc_cap")
+    declared = breakdown.get("assurances_icc", 0)
+    if cap is not None:
+        gap = cap - declared
+        if gap >= MIN_GAP:
+            signals.append({
+                "code": "300", "label": "Assurances — plafond non atteint",
+                "note": f"CHF {_chf(gap)} of headroom below the ICC cap "
+                        f"(CHF {_chf(cap)}) — any other deductible insurance "
+                        "premium (accident, life, health for a dependent) "
+                        "not yet declared?",
+            })
+    return signals
+
+
 def detect_candidate_signals(data: dict) -> list:
     """Mechanism 3 aid: structured evidence for entitlement levers `optimize.py`
     cannot compute a CHF amount for. These are questions, not findings — never
@@ -254,7 +276,7 @@ def run_main(argv) -> tuple:
     levers += parse_lever_spec(args.lever)
     results = run_scenarios(base_args, levers, scripts)
     exported = run_export_json(Path(args.file), scripts)
-    signals = detect_candidate_signals(exported)
+    signals = detect_candidate_signals(exported) + detect_insurance_gap_signal(compute["breakdown"])
     return 0, format_report(results, periode=str(periode), signals=signals)
 
 

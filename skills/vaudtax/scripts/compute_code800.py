@@ -198,9 +198,6 @@ def compute(data: dict) -> dict:
     ins = data.get("insurance_premiums") or {}
     ins_net = int(ins.get("gross_premiums_chf") or 0) - int(ins.get("subsidies_chf") or 0)
     assurances_icc = min(ins_net, _ICC_INS_MARRIED if is_married else _ICC_INS_SINGLE)
-    # IFD: assurances + autres cotisations + savings interest share one cap
-    assurances_ifd = min(ins_net + autres_cotisations + savings_interest,
-                         _IFD_INS_MARRIED if is_married else _IFD_INS_SINGLE)
 
     # ── Code 310 — pilier 3a ──────────────────────────────────────────────
     pilier3a_by_ctb = {
@@ -276,6 +273,17 @@ def compute(data: dict) -> dict:
             code235_ifd = min(_CODE235_IFD_MAX, max(_CODE235_IFD_MIN, round(0.5 * lower_ifd)))
             code235_ifd = min(code235_ifd, lower_ifd)
 
+    # IFD: assurances + autres cotisations + savings interest share one cap.
+    # Art. 33 al. 1bis LIFD: that cap is increased by half for taxpayers who
+    # pay no 2e pilier (LPP) contribution and no pilier 3a contribution.
+    has_lpp_contribution = any(
+        int(e.get("pension_contribution_chf") or 0) > 0
+        for e in data.get("income", []))
+    ifd_ins_cap_base = _IFD_INS_MARRIED if is_married else _IFD_INS_SINGLE
+    ifd_ins_cap = (ifd_ins_cap_base if (has_lpp_contribution or pilier3a > 0)
+                   else round(ifd_ins_cap_base * 1.5))
+    assurances_ifd = min(ins_net + autres_cotisations + savings_interest, ifd_ins_cap)
+
     # ── Code 480 — intérêts capitaux d'épargne (ICC only) ─────────────────
     cap_480 = _ICC_EPARGNE_MARRIED if is_married else _ICC_EPARGNE_SINGLE
     interets_epargne = min(savings_interest, cap_480)
@@ -332,6 +340,9 @@ def compute(data: dict) -> dict:
                           - assurances_ifd - pilier3a - admin_titres
                           - interets_dettes)
     medical_ifd = min(max(0, medical_net - round(revenu_interm * 5 / 95)), medical_net)
+    # FIXME: this married figure (2800) has no citation anywhere in this file
+    # or in deductions.md — could not confirm it against LIFD while working
+    # nearby; verify before trusting revenu_ifd for married taxpayers.
     ifd_social = 2800 if is_married else 0
     revenu_ifd = revenu_interm - medical_ifd - ifd_social
 
@@ -364,7 +375,11 @@ def compute(data: dict) -> dict:
             "autres_frais":     autres_frais,
             "assurances_icc":   assurances_icc,
             "assurances_ifd":   round(assurances_ifd),
+            "assurances_icc_cap": _ICC_INS_MARRIED if is_married else _ICC_INS_SINGLE,
+            "assurances_ifd_cap": ifd_ins_cap,
             "pilier3a":         pilier3a,
+            "code235_icc":      code235_icc,
+            "code235_ifd":      code235_ifd,
             "autres_cotisations": autres_cotisations,
             "code235_icc":      code235_icc,
             "code235_ifd":      code235_ifd,
@@ -395,6 +410,7 @@ def _print_results(result: dict) -> None:
     print(f"  Autres frais prof. (code 160)  CHF {b['autres_frais']:>10,}")
     print(f"  Assurances (code 300)          CHF {b['assurances_icc']:>10,}")
     print(f"  Pilier 3a (code 310)           CHF {b['pilier3a']:>10,}")
+    print(f"  Double activité (code 235)     CHF {b['code235_icc']:>10,}")
     print(f"  Autres cotis. (code 340)       CHF {b['autres_cotisations']:>10,}")
     print(f"  Double activité (code 235)     CHF {b['code235_icc']:>10,}")
     print(f"  Intérêts épargne (code 480)    CHF {b['interets_epargne']:>10,}")

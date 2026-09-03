@@ -49,6 +49,8 @@ A saving can only come from one of three places:
 
 **The rule:** a lever is a saving only when **both** the rule (cited in the `vaudtax` skill's `references/deductions.md`, keyed by CODE) **and** eligibility (evidenced in the declaration) hold. If either is unconfirmed, it is a **question for the user, not a finding**.
 
+For levers with no possible file signal (garde, dons, rachat) and for catalog codes that got no signal hit, don't stay silent — ask the user directly. See [`references/questions.md`](references/questions.md) for what to ask and how to fold the answer back into a `--lever`.
+
 ## Integrity guardrails
 
 **Surfacing a saving the taxpayer isn't entitled to is worse than missing one.**
