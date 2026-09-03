@@ -88,6 +88,11 @@ def detect_auto_levers(breakdown: dict, caps: dict, periode: int, current_year: 
     only ever detects one year's gap. Someone with shortfalls in several
     past years (each independently buyable within its own 10-year window)
     needs one run per year's file — gaps are never aggregated across years.
+    It also always compares against the caller's `caps` (currently the
+    single CAPS_2025 table, hardcoded at the call site) rather than the
+    cap that applied in `periode` — the 3a cap is indexed annually, so a
+    run against an older year's file understates or overstates the true
+    gap unless the caller passes that year's own cap.
     """
     levers, signals = [], []
     gap_3a = caps["pilier3a_lpp"] - breakdown.get("pilier3a", 0)
