@@ -80,6 +80,9 @@ _ICC_LOGEMENT_PLAFOND_MARRIED = 13700  # max rent for housing deduction, married
 _ICC_LOGEMENT_PLAFOND_PER_CHILD = 3700 # additional plafond per dependant child
 _ICC_LOGEMENT_MAX_DEDUCTION   = 6800   # absolute max deduction regardless of family
 _ADMIN_TITRES_PERMILLE = 1.5    # 1.5‰ of securities + bank account value (code 490)
+_CODE235_ICC_MONTANT   = 1700   # double activité des conjoints, ICC flat amount
+_CODE235_IFD_MIN       = 8600   # double activité des conjoints, IFD floor
+_CODE235_IFD_MAX       = 14100  # double activité des conjoints, IFD cap
 
 
 def _transport_icc_forfait(km: int) -> int:
@@ -87,6 +90,16 @@ def _transport_icc_forfait(km: int) -> int:
         if km <= threshold:
             return amount
     return _ICC_TRANSPORT_FORFAIT[-1][1]
+
+
+def _sum_by_ctb(entries: list, field: str) -> dict:
+    """Sum a numeric field per taxpayer tag ('CTB1'/'CTB2') across a list of entries."""
+    totals = {"CTB1": 0, "CTB2": 0}
+    for e in entries:
+        tp = e.get("taxpayer")
+        if tp in totals and e.get(field):
+            totals[tp] += int(e[field])
+    return totals
 
 
 def compute(data: dict) -> dict:
@@ -190,8 +203,78 @@ def compute(data: dict) -> dict:
                          _IFD_INS_MARRIED if is_married else _IFD_INS_SINGLE)
 
     # ── Code 310 — pilier 3a ──────────────────────────────────────────────
-    pilier3a = (min(int(ins.get("third_pillar_a_chf") or 0), pillar3a_max_lpp)
-                + min(int(ins.get("third_pillar_a_ctb2_chf") or 0), pillar3a_max_lpp))
+    pilier3a_by_ctb = {
+        "CTB1": min(int(ins.get("third_pillar_a_chf") or 0), pillar3a_max_lpp),
+        "CTB2": min(int(ins.get("third_pillar_a_ctb2_chf") or 0), pillar3a_max_lpp),
+    }
+    pilier3a = pilier3a_by_ctb["CTB1"] + pilier3a_by_ctb["CTB2"]
+
+    # ── Code 235 — double activité des conjoints ───────────────────────────
+    # Applies only to jointly-taxed couples where both spouses have a
+    # lucrative activity. Deduction is computed on each spouse's net work
+    # income = salary/self-employment minus acquisition costs (codes 140-165)
+    # and prévoyance contributions (codes 310-340) — deductions.md CODE 235.
+    code235_icc = code235_ifd = 0
+    if is_married:
+        salary_by_ctb = _sum_by_ctb(data.get("income", []), "net_salary_chf")
+        self_emp_by_ctb = _sum_by_ctb(data.get("self_employment_income", []), "net_revenue_chf")
+        gross_work_by_ctb = {ctb: salary_by_ctb[ctb] + self_emp_by_ctb[ctb] for ctb in ("CTB1", "CTB2")}
+
+        transport_icc_by_ctb = {"CTB1": 0, "CTB2": 0}
+        transport_ifd_by_ctb = {"CTB1": 0, "CTB2": 0}
+        for t in data.get("transport_costs", []):
+            tp = t.get("taxpayer")
+            if tp not in transport_icc_by_ctb:
+                continue
+            km = int(t.get("km") or 0)
+            mean = t.get("mean") or ""
+            is_flat_rate = t.get("is_flat_rate") or False
+            if "PUBLIC" in mean or is_flat_rate:
+                icc_amount = _transport_icc_forfait(km)
+                transport_icc_by_ctb[tp] += icc_amount
+                transport_ifd_by_ctb[tp] += min(icc_amount, _IFD_TRANSPORT_MAX)
+
+        meals_by_ctb = {"CTB1": 0, "CTB2": 0}
+        for m in data.get("meal_costs", []):
+            tp = m.get("taxpayer")
+            if tp not in meals_by_ctb:
+                continue
+            t = m.get("type") or ""
+            days = int(m.get("days") or 0)
+            if "CANTINE" in t or "EMPLOYEUR" in t:
+                meals_by_ctb[tp] += min(round(days * _MEAL_CANTINE_PER_DAY), _MEAL_CANTINE_MAX)
+            else:
+                meals_by_ctb[tp] += min(days * _MEAL_PER_DAY, _MEAL_MAX)
+
+        autres_frais_by_ctb = {
+            "CTB1": int(opex.get("ctb1_forfait_chf") or 0),
+            "CTB2": int(opex.get("ctb2_forfait_chf") or 0),
+        }
+        for ctb in ("CTB1", "CTB2"):
+            if not autres_frais_by_ctb[ctb] and salary_by_ctb[ctb]:
+                autres_frais_by_ctb[ctb] = max(2000, min(4000, round(salary_by_ctb[ctb] * 0.03)))
+
+        autres_cotisations_by_ctb = _sum_by_ctb(data.get("income", []), "other_contractual_contribution_chf")
+
+        net_icc_by_ctb = {
+            ctb: (gross_work_by_ctb[ctb] - transport_icc_by_ctb[ctb] - meals_by_ctb[ctb]
+                  - autres_frais_by_ctb[ctb] - pilier3a_by_ctb[ctb] - autres_cotisations_by_ctb[ctb])
+            for ctb in ("CTB1", "CTB2")
+        }
+        net_ifd_by_ctb = {
+            ctb: (gross_work_by_ctb[ctb] - transport_ifd_by_ctb[ctb] - meals_by_ctb[ctb]
+                  - autres_frais_by_ctb[ctb] - pilier3a_by_ctb[ctb] - autres_cotisations_by_ctb[ctb])
+            for ctb in ("CTB1", "CTB2")
+        }
+
+        both_active = gross_work_by_ctb["CTB1"] > 0 and gross_work_by_ctb["CTB2"] > 0
+        if both_active:
+            lower_icc = max(0, min(net_icc_by_ctb["CTB1"], net_icc_by_ctb["CTB2"]))
+            code235_icc = min(_CODE235_ICC_MONTANT, lower_icc)
+
+            lower_ifd = max(0, min(net_ifd_by_ctb["CTB1"], net_ifd_by_ctb["CTB2"]))
+            code235_ifd = min(_CODE235_IFD_MAX, max(_CODE235_IFD_MIN, round(0.5 * lower_ifd)))
+            code235_ifd = min(code235_ifd, lower_ifd)
 
     # ── Code 480 — intérêts capitaux d'épargne (ICC only) ─────────────────
     cap_480 = _ICC_EPARGNE_MARRIED if is_married else _ICC_EPARGNE_SINGLE
@@ -219,7 +302,7 @@ def compute(data: dict) -> dict:
 
     # ── Code 700 (before logement and medical) ────────────────────────────
     code_700_pre = round(gross_income
-                         - transport_icc - meals - autres_frais
+                         - transport_icc - meals - autres_frais - code235_icc
                          - assurances_icc - pilier3a - autres_cotisations
                          - interets_epargne - admin_titres
                          - interets_dettes)
@@ -245,7 +328,7 @@ def compute(data: dict) -> dict:
 
     # ── IFD ───────────────────────────────────────────────────────────────
     revenu_interm = round(gross_income
-                          - transport_ifd - meals - autres_frais
+                          - transport_ifd - meals - autres_frais - code235_ifd
                           - assurances_ifd - pilier3a - admin_titres
                           - interets_dettes)
     medical_ifd = min(max(0, medical_net - round(revenu_interm * 5 / 95)), medical_net)
@@ -283,6 +366,8 @@ def compute(data: dict) -> dict:
             "assurances_ifd":   round(assurances_ifd),
             "pilier3a":         pilier3a,
             "autres_cotisations": autres_cotisations,
+            "code235_icc":      code235_icc,
+            "code235_ifd":      code235_ifd,
             "interets_epargne": round(interets_epargne),
             "interets_dettes":  interets_dettes,
             "admin_titres":     admin_titres,
@@ -311,6 +396,7 @@ def _print_results(result: dict) -> None:
     print(f"  Assurances (code 300)          CHF {b['assurances_icc']:>10,}")
     print(f"  Pilier 3a (code 310)           CHF {b['pilier3a']:>10,}")
     print(f"  Autres cotis. (code 340)       CHF {b['autres_cotisations']:>10,}")
+    print(f"  Double activité (code 235)     CHF {b['code235_icc']:>10,}")
     print(f"  Intérêts épargne (code 480)    CHF {b['interets_epargne']:>10,}")
     print(f"  Admin. titres (code 490)       CHF {b['admin_titres']:>10,}")
     print(f"  Intérêts dettes (code 520)     CHF {b['interets_dettes']:>10,}")
@@ -322,6 +408,7 @@ def _print_results(result: dict) -> None:
     print("  Déductions IFD")
     print(f"  {'─' * 48}")
     print(f"  Transport (code 140)           CHF {b['transport_ifd']:>10,}")
+    print(f"  Double activité (code 235)     CHF {b['code235_ifd']:>10,}")
     print(f"  Assurances+épargne (code 300)  CHF {b['assurances_ifd']:>10,}")
     print(f"  Frais médicaux (code 710)      CHF {b['medical_ifd']:>10,}")
     print(f"\n  ► REVENU IMPOSABLE IFD         CHF {result['revenu_ifd']:>10,}")
