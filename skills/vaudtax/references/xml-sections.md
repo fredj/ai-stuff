@@ -42,7 +42,7 @@ Proprietary format maintained by the Canton Vaud tax authority — no public XSD
 | `relevesFiscauxBancaires` | ✅ Investment portfolios: fiscal value, gross income, IES |
 | `numerairesList` | ✅ Cash and liquid assets |
 | `objetsMobiliers` | ✅ Movable property / crypto |
-| `biensImmobiliers` (2025) / `immeubles` (older) | ✅ Real estate: commune, parcelle, fiscal value, rental income |
+| `biensImmobiliers` (2025) / `immeubles` (older) | ✅ Real estate: commune, parcelle, fiscal value, rental income. Maintenance-cost sub-fields (CODE 540: `batimentExiste`, building age, declared frais effectifs, état locatif) are **not yet parsed** — read the raw XML for those. |
 | `autoMoto` | ✅ Vehicles |
 | `fraisAdministrationTitres` | ✅ Management fees for securities (code 490) |
 

@@ -16,6 +16,7 @@ Each section is keyed by its declaration **CODE**. The code is the stable citati
 - [Autres cotisations contractuelles — CODE 340](#autres-cotisations-contractuelles--code-340)
 - [Intérêts capitaux d'épargne — CODE 480](#intérêts-capitaux-dépargne--code-480)
 - [Frais d'administration de titres — CODE 490](#frais-dadministration-de-titres--code-490)
+- [Frais d'entretien d'immeuble — CODE 540](#frais-dentretien-dimmeuble--code-540)
 - [Intérêts passifs / dettes privées — CODE 610](#intérêts-passifs--dettes-privées--code-610)
 - [Frais de formation et perfectionnement — CODE 618](#frais-de-formation-et-perfectionnement--code-618)
 - [Déduction logement — CODE 660](#déduction-logement--code-660)
@@ -73,6 +74,8 @@ Applies only to jointly-taxed couples where **both** spouses have a lucrative ac
 **ICC (2025):** CHF 1'700 deducted from the **lower** income. If, after acquisition costs (codes 140–165) and prévoyance contributions (codes 310–340), the lower net income is below CHF 1'700, the deduction equals that actual net amount.
 
 **IFD (2025):** 50% of the lower work income (after acquisition costs and prévoyance contributions), **min CHF 8'600, max CHF 14'100**, never exceeding the lower work income.
+
+`compute_code800.py` applies this automatically when both spouses have work income. Its "prévoyance contributions" only cover codes 310 and 340: codes 320 (rachats LPP) and 330 (cotisations des indépendants) are not parsed from the `.vaudtax` file, so the computed amount is overstated when one of those exists.
 
 ICC and IFD deltas differ — model them separately.
 
@@ -184,6 +187,30 @@ The text restricts the forfait to assets *« dont la gestion est confiée à des
 | Non assuré au 2e pilier | CHF 36'288 (20% of net lucrative income) |
 
 Cross-check: sum of all form 21 EDP attestations per taxpayer must equal `formesReconnuesPrevoyanceIndividuelleContribuable1/2` and must not exceed the applicable maximum. Missing attestations = unjustified declaration.
+
+**Rachat de lacune (catch-up buy-back), from 2026:** federal pillar-3a reform allows buying back a contribution gap from a **prior year, starting with gap-year 2025**, within a **10-year window**, subject to (a) the ordinary contribution for the buy-back year itself being paid **in full first**, and (b) the 3a provider actually offering the feature (rolling out from January 2026 — confirm with the provider, do not assume). Unlike the ordinary CODE 310 cap, this is **not** something a declaration for the gap year itself can show as unclaimed — it is claimed on a **later year's** declaration, at that later year's tax base and rate. Never invent the buy-back amount: it equals the prior year's actual shortfall to the cap that applied in that year.
+
+---
+
+## Frais d'entretien d'immeuble — CODE 540
+
+Applies only to a **built** property (`batimentExiste = true`) declared under real estate — an unbuilt land parcel (`non bâti`) has no maintenance deduction. Deductible either as **frais effectifs** (documented, justified costs that preserve value — not investments that increase it) or as a **flat-rate percentage**, chosen freely each year; the two cannot be combined in the same fiscal period.
+
+**ICC (2025)** — source: [Tableau des principales déductions vaudoises 2025](https://www.vd.ch/fileadmin/user_upload/organisation/dfin/aci/fichiers_pdf/Tableau_des_d%C3%A9ductions_2025.pdf):
+
+| Situation | Forfait |
+|---|---|
+| Immeuble > 20 ans, occupé par le propriétaire | 30% de la valeur locative |
+| Immeuble ≤ 20 ans, occupé par le propriétaire | 20% de la valeur locative |
+| Immeuble > 20 ans, mis en location | 20% du revenu net de l'immeuble privé |
+| Immeuble ≤ 20 ans, mis en location | 10% du revenu net de l'immeuble privé |
+| État locatif > CHF 150'000 | frais effectifs, ou forfait calculé sur un état locatif plafonné à CHF 150'000 |
+
+**IFD (2025):** flat-rate option is **10%** of gross valeur locative for buildings **≤ 10 years old**, **20%** for buildings **older than 10 years** (Art. 32 al. 4 LIFD) — a different age threshold than ICC's 20-year cutoff. Confirm the exact wording against the current-year circular if precision matters; this citation is cross-confirmed from secondary sources, not the primary federal text.
+
+**Réforme valeur locative (from 2029):** the owner-occupied variant of this deduction (tied to valeur locative) disappears alongside the suppression of valeur locative income — see the guardrail in `vaudtax-optimize/SKILL.md`. The rented-property variant (based on revenu net de l'immeuble privé) is not directly tied to valeur locative and is not addressed by that reform.
+
+**Not yet parsed:** `parse_vaudtax.py` / `export_json.py` extract real estate identity, fiscal value, and rental income (`biensImmobiliers`/`immeubles`) but do not yet extract maintenance-cost sub-fields (declared frais effectifs, building age, `batimentExiste`, état locatif). Confirm eligibility and amounts directly against the declaration's real-estate section rather than assuming these are exposed in the exported JSON.
 
 ---
 
