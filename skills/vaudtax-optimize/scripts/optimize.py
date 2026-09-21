@@ -170,15 +170,6 @@ def detect_candidate_signals(data: dict) -> list:
     """
     signals = []
 
-    ctb1_income = any(e.get("taxpayer") == "CTB1" for e in data.get("income", []))
-    ctb2_income = any(e.get("taxpayer") == "CTB2" for e in data.get("income", []))
-    if data.get("taxpayer2") and ctb1_income and ctb2_income:
-        signals.append({
-            "code": "235", "label": "Double activité des conjoints",
-            "note": "Both spouses have lucrative income — check eligibility "
-                    "(see deductions.md CODE 235) and pass --lever if it applies.",
-        })
-
     if data.get("education_costs"):
         signals.append({
             "code": "618", "label": "Frais de formation",

@@ -24,8 +24,6 @@ All scripts live in the `scripts/` subdirectory of this skill and use only Pytho
 | `export_json.py <file.vaudtax> [out.json]` | Export clean JSON (omits UI/navigation state) |
 | `compute_code800.py <file.vaudtax>` | Estimate revenu imposable ICC (code 800), IFD, and fortune — outputs values ready to pass to `calculate_taxes.py` |
 | `calculate_taxes.py --periode YEAR --commune NAME --revenu-icc N --fortune-icc N --revenu-ifd N` | Query the official Canton Vaud tax calculator via HTTP POST and return authoritative results |
-| `scripts/test_code235.py` | Local test suite for CODE 235 (double activité des conjoints) in `compute_code800.py`; run with `pytest scripts/test_code235.py`. Kept untracked, not part of the committed skill. |
-| `scripts/test_code235_fixtures.py` | Shared fixtures for `scripts/test_code235.py`. Kept untracked, not part of the committed skill. |
 
 The JSON output conforms to **[vaudtax-export.schema.json](references/vaudtax-export.schema.json)** (JSON Schema 2020-12).
 

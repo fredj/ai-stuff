@@ -75,6 +75,8 @@ Applies only to jointly-taxed couples where **both** spouses have a lucrative ac
 
 **IFD (2025):** 50% of the lower work income (after acquisition costs and prévoyance contributions), **min CHF 8'600, max CHF 14'100**, never exceeding the lower work income.
 
+`compute_code800.py` applies this automatically when both spouses have work income. Its "prévoyance contributions" only cover codes 310 and 340: codes 320 (rachats LPP) and 330 (cotisations des indépendants) are not parsed from the `.vaudtax` file, so the computed amount is overstated when one of those exists.
+
 ICC and IFD deltas differ — model them separately.
 
 ---

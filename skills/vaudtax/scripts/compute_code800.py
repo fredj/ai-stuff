@@ -92,6 +92,10 @@ def _transport_icc_forfait(km: int) -> int:
     return _ICC_TRANSPORT_FORFAIT[-1][1]
 
 
+def _autres_frais_forfait(salary: int) -> int:
+    return min(salary, max(2000, min(4000, round(salary * 0.03))))
+
+
 def _sum_by_ctb(entries: list, field: str) -> dict:
     """Sum a numeric field per taxpayer tag ('CTB1'/'CTB2') across a list of entries."""
     totals = {"CTB1": 0, "CTB2": 0}
@@ -178,11 +182,18 @@ def compute(data: dict) -> dict:
             meals += min(days * _MEAL_PER_DAY, _MEAL_MAX)
 
     # ── Code 160 — autres frais professionnels ────────────────────────────
+    # Forfait is per salary: 3% of each net salary, min 2'000, max 4'000,
+    # but never above the salary itself.
     opex = data.get("other_professional_expenses") or {}
-    autres_frais = (int(opex.get("ctb1_forfait_chf") or 0)
-                    + int(opex.get("ctb2_forfait_chf") or 0))
-    if not autres_frais:
-        autres_frais = max(2000, min(4000, round(salary * 0.03)))
+    salary_by_ctb = _sum_by_ctb(data.get("income", []), "net_salary_chf")
+    autres_frais_by_ctb = {
+        "CTB1": int(opex.get("ctb1_forfait_chf") or 0),
+        "CTB2": int(opex.get("ctb2_forfait_chf") or 0),
+    }
+    for ctb in ("CTB1", "CTB2"):
+        if not autres_frais_by_ctb[ctb] and salary_by_ctb[ctb]:
+            autres_frais_by_ctb[ctb] = _autres_frais_forfait(salary_by_ctb[ctb])
+    autres_frais = autres_frais_by_ctb["CTB1"] + autres_frais_by_ctb["CTB2"]
 
     # ── Code 340 — autres cotisations contractuelles des salariés ─────────
     # Primes d'assurance perte de gain retenues contractuellement sur le
@@ -211,9 +222,11 @@ def compute(data: dict) -> dict:
     # lucrative activity. Deduction is computed on each spouse's net work
     # income = salary/self-employment minus acquisition costs (codes 140-165)
     # and prévoyance contributions (codes 310-340) — deductions.md CODE 235.
+    # Codes 320 (rachats LPP) and 330 (cotisations des indépendants) are not
+    # parsed from the .vaudtax file, so they are missing here and from the
+    # baseline; both overstate the result when such a contribution exists.
     code235_icc = code235_ifd = 0
     if is_married:
-        salary_by_ctb = _sum_by_ctb(data.get("income", []), "net_salary_chf")
         self_emp_by_ctb = _sum_by_ctb(data.get("self_employment_income", []), "net_revenue_chf")
         gross_work_by_ctb = {ctb: salary_by_ctb[ctb] + self_emp_by_ctb[ctb] for ctb in ("CTB1", "CTB2")}
 
@@ -242,14 +255,6 @@ def compute(data: dict) -> dict:
                 meals_by_ctb[tp] += min(round(days * _MEAL_CANTINE_PER_DAY), _MEAL_CANTINE_MAX)
             else:
                 meals_by_ctb[tp] += min(days * _MEAL_PER_DAY, _MEAL_MAX)
-
-        autres_frais_by_ctb = {
-            "CTB1": int(opex.get("ctb1_forfait_chf") or 0),
-            "CTB2": int(opex.get("ctb2_forfait_chf") or 0),
-        }
-        for ctb in ("CTB1", "CTB2"):
-            if not autres_frais_by_ctb[ctb] and salary_by_ctb[ctb]:
-                autres_frais_by_ctb[ctb] = max(2000, min(4000, round(salary_by_ctb[ctb] * 0.03)))
 
         autres_cotisations_by_ctb = _sum_by_ctb(data.get("income", []), "other_contractual_contribution_chf")
 
@@ -340,9 +345,7 @@ def compute(data: dict) -> dict:
                           - assurances_ifd - pilier3a - admin_titres
                           - interets_dettes)
     medical_ifd = min(max(0, medical_net - round(revenu_interm * 5 / 95)), medical_net)
-    # FIXME: this married figure (2800) has no citation anywhere in this file
-    # or in deductions.md — could not confirm it against LIFD while working
-    # nearby; verify before trusting revenu_ifd for married taxpayers.
+    # Art. 35 al. 1 let. c LIFD: CHF 2'800 for spouses in joint household.
     ifd_social = 2800 if is_married else 0
     revenu_ifd = revenu_interm - medical_ifd - ifd_social
 
@@ -381,8 +384,6 @@ def compute(data: dict) -> dict:
             "code235_icc":      code235_icc,
             "code235_ifd":      code235_ifd,
             "autres_cotisations": autres_cotisations,
-            "code235_icc":      code235_icc,
-            "code235_ifd":      code235_ifd,
             "interets_epargne": round(interets_epargne),
             "interets_dettes":  interets_dettes,
             "admin_titres":     admin_titres,
@@ -412,7 +413,6 @@ def _print_results(result: dict) -> None:
     print(f"  Pilier 3a (code 310)           CHF {b['pilier3a']:>10,}")
     print(f"  Double activité (code 235)     CHF {b['code235_icc']:>10,}")
     print(f"  Autres cotis. (code 340)       CHF {b['autres_cotisations']:>10,}")
-    print(f"  Double activité (code 235)     CHF {b['code235_icc']:>10,}")
     print(f"  Intérêts épargne (code 480)    CHF {b['interets_epargne']:>10,}")
     print(f"  Admin. titres (code 490)       CHF {b['admin_titres']:>10,}")
     print(f"  Intérêts dettes (code 520)     CHF {b['interets_dettes']:>10,}")

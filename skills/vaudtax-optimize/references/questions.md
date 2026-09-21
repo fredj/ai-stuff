@@ -1,7 +1,7 @@
 # Questions to Ask
 
 `detect_candidate_signals` in `optimize.py` only covers levers whose eligibility
-evidence can live in the XML (235, 618, 610). Garde (670), dons (720), and
+evidence can live in the XML (618, 610). Garde (670), dons (720), and
 rachat LPP (320) carry no such evidence — children, donations, and LPP
 buy-back capacity are not data the `.vaudtax` file contains. For these,
 silence is wrong: after running `optimize.py`, ask the user directly instead
@@ -35,9 +35,9 @@ saving if the taxpayer already holds an undeclared, deductible premium
 *"You have CHF X of headroom below the insurance cap — any other deductible
 premium not yet declared?"*
 
-Also ask for any of 235 / 618 / 610 that had **no** signal fire, unless the
-signal check itself makes the code structurally inapplicable (no CTB2 means
-235 can't apply; no real estate means 610 can't apply).
+Also ask for any of 618 / 610 that had **no** signal fire, unless the
+signal check itself makes the code structurally inapplicable (no real estate
+means 610 can't apply).
 
 A "yes" with a number becomes a `--lever` string and gets rerun through
 `calculate_taxes.py`. A "no" or "unsure" goes into **Couldn't assess** —

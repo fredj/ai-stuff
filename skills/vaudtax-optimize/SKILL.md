@@ -43,9 +43,9 @@ A saving can only come from one of three places:
 
 1. **Gap-to-cap (mechanical, auto).** A contribution with explicit headroom to a hard cap. Only **pilier 3a (CODE 310)** is auto-detected — `optimize.py` computes `7258 − declared` itself. No `--lever` needed.
 2. **Forfait under-claim (none here).** Transport (140), repas (150) and autres frais (160) are already auto-maximised by `compute_code800`. They carry no headroom — do not offer them as levers.
-3. **Entitlement gaps (judgment).** Childcare, formation, dons, intérêts passifs, double activité, LPP buy-back. `optimize.py` cannot compute a CHF amount for these from the declaration alone. Surface them as **questions or explicit `--lever` strings — never assert them**.
+3. **Entitlement gaps (judgment).** Childcare, formation, dons, intérêts passifs, LPP buy-back. `optimize.py` cannot compute a CHF amount for these from the declaration alone. Surface them as **questions or explicit `--lever` strings — never assert them**.
 
-`optimize.py` still helps here: it scans the export for structured evidence of some of these (formation costs already declared, a jointly-taxed couple where both spouses have income, real estate with no declared debt interest) and prints them as **"Signals found"** — a prompt to go check eligibility, never a computed saving. See `detect_candidate_signals` in `optimize.py` and the codes it covers in [`references/levers.md`](references/levers.md).
+`optimize.py` still helps here: it scans the export for structured evidence of some of these (formation costs already declared, real estate with no declared debt interest) and prints them as **"Signals found"** — a prompt to go check eligibility, never a computed saving. See `detect_candidate_signals` in `optimize.py` and the codes it covers in [`references/levers.md`](references/levers.md).
 
 **The rule:** a lever is a saving only when **both** the rule (cited in the `vaudtax` skill's `references/deductions.md`, keyed by CODE) **and** eligibility (evidenced in the declaration) hold. If either is unconfirmed, it is a **question for the user, not a finding**.
 

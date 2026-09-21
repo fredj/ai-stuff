@@ -10,9 +10,9 @@ A saving can only come from one of three places:
 
 1. **Gap-to-cap, auto-detected.** A contribution with explicit headroom to a hard cap. Only **pilier 3a (CODE 310)** is auto-detected by `optimize.py` — it computes `7258 − declared` itself. No `--lever` needed.
 2. **Forfait under-claim.** A formula-based deduction left below its mechanical maximum. There are none to exploit here: transport (140), repas (150) and autres frais (160) are already auto-maximised by `compute_code800` — see below. Do not offer them as levers.
-3. **Entitlement levers, passed explicitly.** Deductions the taxpayer is entitled to but that require an eligibility judgment and/or supporting evidence (childcare, formation, dons, debt interest, double-activité, LPP buy-back). `optimize.py` cannot compute a CHF amount for these from the declaration alone, so they are passed with `--lever "name:icc=N,ifd=N[,cost=N][,type=...]"`.
+3. **Entitlement levers, passed explicitly.** Deductions the taxpayer is entitled to but that require an eligibility judgment and/or supporting evidence (childcare, formation, dons, debt interest, LPP buy-back). `optimize.py` cannot compute a CHF amount for these from the declaration alone, so they are passed with `--lever "name:icc=N,ifd=N[,cost=N][,type=...]"`.
 
-For three of these codes, `optimize.py` auto-detects the *evidence* (not the amount) and prints it as a "Signals found" line, so the agent doesn't have to already know to look: code 235 (both spouses have declared income), code 618 (training costs already present in the XML), and code 610 (real estate declared with no debt interest at all). These are still questions, not findings — confirm eligibility before turning one into a `--lever`.
+For two of these codes, `optimize.py` auto-detects the *evidence* (not the amount) and prints it as a "Signals found" line, so the agent doesn't have to already know to look: code 618 (training costs already present in the XML), and code 610 (real estate declared with no debt interest at all). These are still questions, not findings — confirm eligibility before turning one into a `--lever`.
 
 `optimize.py` also auto-detects a **gap-to-cap** signal on code 300 (declared insurance premiums below the ICC cap) the same way it does for pilier 3a — but unlike 3a there's no "top up" action: the gap only becomes real money if the taxpayer already holds an undeclared, deductible premium (accident, life, health for a dependent). Always a question — see `references/questions.md`.
 
@@ -39,7 +39,7 @@ A lever is a **real saving only when both** (a) the rule holds (cited in `deduct
 | [720](../../vaudtax/references/deductions.md#dons--code-720) | Dons / donations | `dons` | recoverable | ICC 20% of code 700 / IFD 20% of revenu interm. I; min CHF 100/yr | bases differ | explicit |
 | [540](../../vaudtax/references/deductions.md#frais-dentretien-dimmeuble--code-540) | Frais d'entretien d'immeuble | `entretien` | recoverable | ICC 10–30% of valeur locative / revenu net immeuble, by age+use; IFD 10%/20% by 10-yr age | **differ** (different age thresholds) | explicit — not file-detectable, ask |
 | [610](../../vaudtax/references/deductions.md#intérêts-passifs--dettes-privées--code-610) | Intérêts passifs / debt interest | `interets` | recoverable | gross wealth yield + CHF 50'000 | equal ceiling | explicit |
-| [235](../../vaudtax/references/deductions.md#double-activité-des-conjoints--code-235) | Double activité des conjoints | `double` | recoverable | ICC 1'700 / IFD 50% of lower income ∈ [8'600, 14'100] | **differ** | explicit (married only) |
+| [235](../../vaudtax/references/deductions.md#double-activité-des-conjoints--code-235) | Double activité des conjoints | — | — | ICC 1'700 / IFD 50% of lower income ∈ [8'600, 14'100] | **differ** | **auto-applied by `compute_code800`, not a lever** |
 | [300](../../vaudtax/references/deductions.md#assurances--code-300) | Assurances / undeclared premium | — | recoverable | ICC 5'000 (single) / 9'900 (married) | differ (combined line for IFD) | **auto-detected signal** (gap to ICC cap) |
 | 140 / 150 / 160 | Transport / repas / autres frais | — | — | — | — | **auto-maxed, not a lever** |
 
@@ -97,13 +97,9 @@ Deductible up to gross wealth yield + CHF 50'000; **same ceiling for ICC and IFD
 --lever "interets:icc=3000,ifd=3000,type=recoverable"
 ```
 
-### CODE 235 — Double activité des conjoints (recoverable, married only)
+### CODE 235 — Double activité des conjoints (NOT a lever)
 
-ICC CHF 1'700; IFD 50% of the lower work income within [8'600, 14'100] — **ICC ≠ IFD**. Applies only to jointly-taxed couples where both spouses have a lucrative activity.
-
-```
---lever "double:icc=1700,ifd=10000,type=recoverable"
-```
+Already computed by `compute_code800` in the baseline for jointly-taxed couples where both spouses have work income (`code235_icc` / `code235_ifd` in the breakdown). Passing it as a `--lever` would deduct it twice.
 
 ### CODES 140 / 150 / 160 — Transport, repas, autres frais (NOT levers)
 
