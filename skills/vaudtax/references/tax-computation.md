@@ -401,3 +401,28 @@ print(mr["marginal_ifd"])     # IFD component
 ```
 
 > **Note:** fortune (wealth) is not included in the marginal rate — wealth tax is flat once above the threshold, so only income matters for the marginal rate computation.
+
+---
+
+## Impôt distinct sur les prestations en capital
+
+A pension capital withdrawal (2nd pillar, pilier 3a) is not added to the year's income: it bears a separate tax (*impôt distinct*), ICC + IFD, computed on the **total of the capital benefits received in the year**. Withdrawals in the same year (an LPP capital and a 3a account, two 3a accounts) are added together before the tax is computed; spreading 3a accounts over several years keeps each one in a lower bracket.
+
+The official calculator handles it when its "impôt distinct" box is the only simulation checked; `--capital` sends exactly that:
+
+```bash
+python calculate_taxes.py --periode 2026 --commune "Lausanne" --etat-civil married --capital 500000
+
+# also the rate on CHF 1000 more (e.g. the cost of an LPP buyback taken out as capital)
+python calculate_taxes.py --periode 2026 --commune "Lausanne" --capital 500000 --marginal-rate --json
+```
+
+```python
+from calculate_taxes import calculate_capital_tax
+
+ct = calculate_capital_tax(periode=2026, commune="Lausanne", capital=500_000,
+                           etat_civil="married", delta=15_000)
+print(ct["total_icc_ifd"], ct["taux_moyen"], ct["marginal_rate"])
+```
+
+The rate grows with the amount (order of magnitude for 2026, depending on the commune: ~4–5% on CHF 130'000, ~7.5–9% on CHF 500'000–1'000'000), so a buyback that ends up in a large capital withdrawal is taxed at the marginal rate on top of that capital, not the average.

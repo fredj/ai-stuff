@@ -14,6 +14,9 @@ Usage (standalone):
         --fortune-icc 337081 \\
         --revenu-ifd 102946
 
+    # Separate tax on a pension capital withdrawal (2nd pillar / 3a)
+    python calculate_taxes.py --periode 2026 --commune "Lausanne" --capital 500000
+
 Usage (as module):
     from calculate_taxes import calculate_taxes
     result = calculate_taxes(
@@ -73,6 +76,7 @@ def _build_payload(
     revenu_ifd: int,
     calcul_icc: bool,
     calcul_ifd: bool,
+    impot_distinct: bool = False,
 ) -> bytes:
     etat_civil_val = ETAT_CIVIL_MAP.get(str(etat_civil).lower())
     if etat_civil_val is None:
@@ -83,10 +87,15 @@ def _build_payload(
     commune_val = _normalize_commune(commune)
 
     fields = []
-    if calcul_icc:
-        fields.append(("tx_vdsqlicalculetteaci_pi1[calculICC]", "on"))
-    if calcul_ifd:
-        fields.append(("tx_vdsqlicalculetteaci_pi1[calculIFD]", "on"))
+    # The server only computes the separate capital tax when this box is the
+    # sole simulation checked (the page's JavaScript unchecks the others).
+    if impot_distinct:
+        fields.append(("tx_vdsqlicalculetteaci_pi1[impotDistinct]", "on"))
+    else:
+        if calcul_icc:
+            fields.append(("tx_vdsqlicalculetteaci_pi1[calculICC]", "on"))
+        if calcul_ifd:
+            fields.append(("tx_vdsqlicalculetteaci_pi1[calculIFD]", "on"))
 
     fields += [
         ("tx_vdsqlicalculetteaci_pi1[periode]",              str(periode)),
@@ -205,6 +214,7 @@ def calculate_taxes(
     revenu_ifd: int = 0,
     calcul_icc: bool = True,
     calcul_ifd: bool = True,
+    impot_distinct: bool = False,
     timeout: int = 15,
 ) -> dict:
     """Query the Canton Vaud tax calculator and return parsed results.
@@ -222,6 +232,9 @@ def calculate_taxes(
     revenu_ifd    : taxable income for IFD
     calcul_icc    : include ICC simulation
     calcul_ifd    : include IFD simulation
+    impot_distinct: simulate the separate tax on a pension capital withdrawal
+                    instead (revenu_icc / revenu_ifd = the capital amount);
+                    see calculate_capital_tax()
     timeout       : HTTP timeout in seconds
 
     Returns
@@ -235,7 +248,7 @@ def calculate_taxes(
         periode, commune, etat_civil,
         n_enfants, n_enfants_demi, n_enfants_menage,
         revenu_icc, fortune_icc, revenu_ifd,
-        calcul_icc, calcul_ifd,
+        calcul_icc, calcul_ifd, impot_distinct,
     )
     req = Request(URL, data=payload, method="POST")
     req.add_header("Content-Type", "application/x-www-form-urlencoded")
@@ -258,6 +271,55 @@ def calculate_taxes(
 
     results["commune_normalized"] = _normalize_commune(commune)
     return results
+
+
+def calculate_capital_tax(
+    periode: int,
+    commune: str,
+    capital: int,
+    etat_civil: str = "single",
+    n_enfants: int = 0,
+    n_enfants_demi: int = 0,
+    n_enfants_menage: int = 0,
+    delta: int = 0,
+    timeout: int = 15,
+) -> dict:
+    """Separate tax (impôt distinct) on a pension capital withdrawal.
+
+    capital is the total of the capital benefits (2nd pillar, 3a) received in
+    the year: the tax is computed on their sum, so withdrawals in the same year
+    must be added together.
+
+    With delta > 0, a second call computes the tax on capital + delta and
+    the marginal rate on that extra amount (e.g. what an LPP buyback adds).
+
+    Returns a dict with total_icc, total_ifd, total_icc_ifd (floats in CHF),
+    taux_moyen (%), and marginal_rate (%) when delta > 0.
+    """
+    def tax_on(amount: int) -> tuple[float, float]:
+        res = calculate_taxes(
+            periode=periode, commune=commune, etat_civil=etat_civil,
+            n_enfants=n_enfants, n_enfants_demi=n_enfants_demi,
+            n_enfants_menage=n_enfants_menage,
+            revenu_icc=amount, revenu_ifd=amount,
+            impot_distinct=True, timeout=timeout,
+        )
+        return _parse_chf(res.get("total_icc", "0")), _parse_chf(res.get("total_ifd", "0"))
+
+    icc, ifd = tax_on(capital)
+    total = icc + ifd
+    result = {
+        "capital": capital,
+        "total_icc": round(icc, 2),
+        "total_ifd": round(ifd, 2),
+        "total_icc_ifd": round(total, 2),
+        "taux_moyen": round(total / capital * 100, 2) if capital else 0.0,
+    }
+    if delta:
+        icc2, ifd2 = tax_on(capital + delta)
+        result["delta"] = delta
+        result["marginal_rate"] = round((icc2 + ifd2 - total) / delta * 100, 2)
+    return result
 
 
 def _print_results(results: dict) -> None:
@@ -325,8 +387,48 @@ def main():
     parser.add_argument("--no-icc",        action="store_true",      help="Skip ICC simulation")
     parser.add_argument("--no-ifd",        action="store_true",      help="Skip IFD simulation")
     parser.add_argument("--marginal-rate", action="store_true",      help="Compute taux marginal d'imposition (2 HTTP calls)")
+    parser.add_argument("--capital",       type=int,   default=0,
+                        help="Separate tax on a pension capital withdrawal of this amount (2nd pillar / 3a); "
+                             "with --marginal-rate, also the rate on CHF 1000 more")
     parser.add_argument("--json",          action="store_true",      help="Output raw JSON instead of formatted table")
     args = parser.parse_args()
+
+    if args.capital:
+        try:
+            ct = calculate_capital_tax(
+                periode=args.periode,
+                commune=args.commune,
+                capital=args.capital,
+                etat_civil=args.etat_civil,
+                n_enfants=args.enfants,
+                n_enfants_demi=args.enfants_demi,
+                n_enfants_menage=args.enfants_menage,
+                delta=1000 if args.marginal_rate else 0,
+            )
+        except (RuntimeError, ValueError) as e:
+            print(f"Error: {e}", file=sys.stderr)
+            sys.exit(1)
+
+        if args.json:
+            print(json.dumps(ct, ensure_ascii=False, indent=2))
+        else:
+            def chf(v: float) -> str:
+                return f"{v:>12,.2f}".replace(",", "'")
+
+            print()
+            print("=" * 52)
+            print("  Impôt distinct sur prestation en capital")
+            print("=" * 52)
+            print(f"  Capital                    CHF {chf(ct['capital'])}")
+            print(f"  ICC (cantonal + communal)  CHF {chf(ct['total_icc'])}")
+            print(f"  IFD (fédéral direct)       CHF {chf(ct['total_ifd'])}")
+            print(f"  TOTAL                      CHF {chf(ct['total_icc_ifd'])}")
+            print(f"  Taux moyen                 {ct['taux_moyen']:>14.2f} %")
+            if "marginal_rate" in ct:
+                print(f"  Taux sur CHF {ct['delta']} de plus  {ct['marginal_rate']:>12.2f} %")
+            print("=" * 52)
+            print()
+        return
 
     if args.marginal_rate:
         try:

@@ -24,6 +24,7 @@ All scripts live in the `scripts/` subdirectory of this skill and use only Pytho
 | `export_json.py <file.vaudtax> [out.json]` | Export clean JSON (omits UI/navigation state) |
 | `compute_code800.py <file.vaudtax>` | Estimate revenu imposable ICC (code 800), IFD, and fortune — outputs values ready to pass to `calculate_taxes.py` |
 | `calculate_taxes.py --periode YEAR --commune NAME --revenu-icc N --fortune-icc N --revenu-ifd N` | Query the official Canton Vaud tax calculator via HTTP POST and return authoritative results |
+| `calculate_taxes.py --periode YEAR --commune NAME --capital N` | Separate tax (impôt distinct) on a pension capital withdrawal (2nd pillar, 3a) — see [tax-computation.md](references/tax-computation.md#impôt-distinct-sur-les-prestations-en-capital) |
 
 The JSON output conforms to **[vaudtax-export.schema.json](references/vaudtax-export.schema.json)** (JSON Schema 2020-12).
 
@@ -157,7 +158,7 @@ Do **not** silently skip unhandled content.
 Working with a declaration sends data to exactly two parties:
 
 1. **The agent's inference API** — everything read during the analysis (parser output, attached PDFs opened for cross-checks) becomes part of the conversation. This is inherent to LLM analysis. To limit it, `parse_vaudtax.py` and `export_json.py` mask direct identifiers (NAVS13, IBANs, phone, e-mail) by default; pass `--full` only when the user explicitly needs them — they are never required for tax analysis.
-2. **`calculate_taxes.py` → `https://www.vd.ch/...`** — only when the user asks for a tax estimate. The POST payload contains: fiscal year, normalized commune name, marital-status code, children counts, and the three taxable amounts (revenu ICC, fortune ICC, revenu IFD). No name, NAVS13, IBAN, or birthdate. `--marginal-rate` makes the call twice.
+2. **`calculate_taxes.py` → `https://www.vd.ch/...`** — only when the user asks for a tax estimate. The POST payload contains: fiscal year, normalized commune name, marital-status code, children counts, and the three taxable amounts (revenu ICC, fortune ICC, revenu IFD). No name, NAVS13, IBAN, or birthdate. `--marginal-rate` makes the call twice. With `--capital`, the payload carries the capital amount in place of the taxable income.
 
 No other bundled script makes network calls.
 
