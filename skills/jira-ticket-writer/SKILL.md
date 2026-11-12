@@ -16,7 +16,8 @@ description: >
 ## Your job
 
 Turn a rough description into polished Jira content — a ticket, a new comment,
-or a reply to an existing comment — always in Jira wiki markup.
+or a reply to an existing comment — in the markup its destination reads (see
+"Output format" below).
 
 ---
 
@@ -196,24 +197,42 @@ Quote the relevant part only if needed for clarity:
 
 ---
 
-## Jira wiki markup reference
+## Output format
 
-Jira uses its own wiki markup — **not Markdown**. Always use Jira syntax in
-ticket descriptions and comments:
+The templates above are in Jira wiki markup. What reads it depends on where the
+text goes:
 
-| Effect | Syntax |
-|--------|--------|
-| Bold | `*text*` |
-| Italic | `_text_` |
-| Bullet list | `* item` |
-| Numbered list | `# item` |
-| Heading | `h2. Title` |
-| Monospace | `{{code}}` |
-| Code block | `{code}...{code}` |
-| Quote | `{quote}...{quote}` |
+- **Pasted by the user into the Jira Cloud editor** (the usual case, for a
+  comment or a ticket description; both use the same editor): the editor reads
+  pasted text as Markdown, not wiki markup. Pasted wiki markup breaks: `h3.`
+  stays literal text and `*bold*` turns italic; `*` lists survive. Give Markdown
+  instead, using the Markdown column below.
+- **Posted through the REST API v2** (`/rest/api/2/.../comment`, `description`):
+  the API reads wiki markup and converts it. Give wiki markup.
+- **REST API v3**: takes Atlassian Document Format (JSON), neither of the above.
 
-Always present the raw markup in a fenced code block so the user can copy-paste
+Ask where the text goes only if the user hasn't said and nothing implies it;
+otherwise default to Markdown for pasting.
+
+| Effect | Wiki markup (API v2) | Markdown (editor paste) |
+|--------|----------------------|-------------------------|
+| Bold | `*text*` | `**text**` |
+| Italic | `_text_` | `_text_` |
+| Bullet list | `* item` | `- item` |
+| Numbered list | `# item` | `1. item` |
+| Heading | `h2. Title` | `## Title` |
+| Monospace | `{{code}}` | `` `code` `` |
+| Code block | `{code}...{code}` | ```` ``` ```` fences |
+| Quote | `{quote}...{quote}` | `> text` |
+| Mention | `[~accountid:<id>]` | typed `@name` in the editor |
+
+Always present the raw text in a fenced code block so the user can copy-paste
 it directly into Jira.
+
+A comment already pasted with the wrong markup can be fixed in place: `PUT
+/rest/api/2/issue/<KEY>/comment/<id>` with `{"body": "<wiki markup>"}`. GET it
+from v2 first and edit that body, so the user's own changes (mentions) are kept;
+this writes to Jira, so ask before running it.
 
 ---
 
